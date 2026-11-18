@@ -1,0 +1,411 @@
+// صفحة المقارنة: تقرأ ملفات ‎*-financials.json‎ (سنوي) و‎*-quarterly-financials.json‎ (ربعي) لكل قطاع.
+// المقارنة السنوية للشركات الأمريكية الشرعية: البيانات من data.json وfinancials.json (TradingView).
+const QUARTER_NAMES = { 1:'الأول', 2:'الثاني', 3:'الثالث', 4:'الرابع' };
+const MONTH_NAMES = {};
+const monthRange = () => '';
+const isCalendarYear = () => true;
+const DEFAULT_PERIOD_SPEC = { ratios: [] };
+const sumQuarters = () => null, withMargins = v => v, quarterLabel = id => id;
+const DATA_BASE = '';
+const VERSION = 'comparison-v6';
+const MAX_COMPANIES = 8; // ثمانية ألوان متمايزة ومتحقق منها؛ أكثر من ذلك يفقد الرسم وضوحه
+const $ = id => document.getElementById(id);
+let SECTORS = []; // [اسم القطاع، مفتاحه] تُملأ من data.json
+const LABELS = { revenue:'الإيرادات', grossProfit:'إجمالي الربح', ebitda:'EBITDA', netIncome:'صافي الربح', eps:'ربحية السهم المخففة', epsBasic:'ربحية السهم الأساسية', dps:'التوزيع النقدي للسهم', freeCashFlow:'التدفق النقدي الحر', capex:'النفقات الرأسمالية', assets:'إجمالي الأصول', debt:'إجمالي الدين', grossMargin:'هامش إجمالي الربح', netMargin:'هامش صافي الربح', fcfMargin:'هامش التدفق النقدي الحر' };
+const SECTOR_LABELS = {};
+const GROUPS = [
+ ['income','قائمة الدخل',['revenue','grossProfit','ebitda','netIncome']],
+ ['cash','التدفقات',['freeCashFlow','capex']],
+ ['balance','المركز المالي',['assets','debt']],
+ ['share','السهم',['eps','epsBasic','dps']],
+ ['ratio','الهوامش والنسب',['grossMargin','netMargin','fcfMargin']],
+];
+// بنود لا يعني ارتفاعها «تحسنًا» بالضرورة: يظهر تغيرها بلون محايد
+const NEUTRAL = new Set(['capex','debt']);
+const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf = d => new Intl.NumberFormat('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const NF = [nf(0),nf(1),nf(2)];
+
+// الفترات: السنة كاملة، أو ربع بعينه عبر السنوات، أو أرباع متتالية، أو تجميع 6 و9 أشهر من الأرباع المستقلة.
+const PERIOD_OPTIONS = [['fy','سنوي']];
+const CUMULATIVE = { h1:{ count:2, short:'6M', name:'6 أشهر' }, m9:{ count:3, short:'9M', name:'9 أشهر' } };
+const SEQ_DEFAULT = 8;
+
+// state.years: معرّفات الأعمدة المختارة (نص): السنة «2025» في السنوي والربع المحدد و6 و9 أشهر، و«2026Q3» في الأرباع المتتالية.
+const state = { sector:'', period:'fy', quarter:'4', metric:'netIncome', years:[], symbols:[], view:'bars', sort:{key:null,dir:-1}, query:'' };
+// chosenPeriod: ما اختاره المستخدم، ويعود إليه عند الانتقال إلى قطاع له نتائج ربعية
+let chosenPeriod = 'fy', annual = null, quarterly = null, companies = [], allYears = [], colLabels = new Map(), slots = new Map(), valueIndex = new Map();
+const lab = id => colLabels.get(id) ?? String(id);
+const isSeq = () => state.period==='seq';
+const hasData = v => !!v && Object.values(v).some(x => Number.isFinite(x));
+
+const isPct = k => k.endsWith('Margin');
+const unit = k => isPct(k) ? '%' : ['eps','epsBasic','dps'].includes(k) ? 'دولار' : 'مليون دولار';
+const label = k => SECTOR_LABELS[state.sector]?.[k] || LABELS[k] || k;
+const valueAt = (c,y) => { const v = valueIndex.get(c.symbol)?.get(y)?.[state.metric]; return Number.isFinite(v) ? v : null; };
+const color = c => `var(--s${(slots.get(c.symbol) ?? 0) + 1})`;
+function fmt(v, signed=false){
+  if(v==null) return '—';
+  const x = isPct(state.metric) ? v*100 : v, a = Math.abs(x);
+  const s = isPct(state.metric) ? NF[1].format(x)+'%' : (a>=1000?NF[0]:NF[2]).format(x);
+  return (signed && x>0 ? '+' : '') + s;
+}
+const num = (v,signed) => `<span class="n">${fmt(v,signed)}</span>`;
+// المختارة بترتيب القائمة (الأكبر قيمة سوقية أولًا)، لا بترتيب الاختيار
+const chosen = () => companies.filter(c => state.symbols.includes(c.symbol));
+
+/* التغير بين قيمتين: نقاط مئوية للبنود النسبية، نسبة عند أساس موجب، وإلا فرق مطلق */
+function change(a,b){
+  if(a==null || b==null) return null;
+  const diff = b-a, dir = diff>0 ? 1 : diff<0 ? -1 : 0, sign = diff>0 ? '+' : '';
+  let text;
+  if(isPct(state.metric)) text = `${sign}${NF[1].format(diff*100)} نقطة`;
+  else if(a>0) text = `${sign}${NF[1].format(diff/a*100)}%`;
+  else text = fmt(diff,true);
+  return { diff, dir, text, pct: !isPct(state.metric) && a>0 ? diff/a : null };
+}
+const dirClass = d => NEUTRAL.has(state.metric) || !d ? '' : d>0 ? 'cx-up' : 'cx-down';
+const arrow = d => d>0 ? '▲' : d<0 ? '▼' : '•';
+
+/* ---------- الحالة في الرابط ---------- */
+function readHash(){
+  const p = new URLSearchParams(location.hash.slice(1));
+  if(SECTORS.some(([,s]) => s===p.get('s'))) state.sector = p.get('s');
+  if(PERIOD_OPTIONS.some(([id]) => id===p.get('p'))) state.period = p.get('p');
+  if(/^[1-4]$/.test(p.get('q')||'')) state.quarter = p.get('q');
+  return { m:p.get('m'), y:(p.get('y')||'').split(',').filter(Boolean), c:(p.get('c')||'').split(',').filter(Boolean), v:p.get('v') };
+}
+function writeHash(){
+  const p = new URLSearchParams({ s:state.sector, p:state.period, ...(state.period==='q' ? {q:state.quarter} : {}), m:state.metric, y:state.years.join(','), c:state.symbols.join(','), v:state.view });
+  history.replaceState(null,'','#'+p.toString().replace(/%2C/g,','));
+}
+
+/* ---------- عناصر الاختيار ---------- */
+function setSymbols(list){
+  state.symbols = list.slice(0,MAX_COMPANIES);
+  for(const s of [...slots.keys()]) if(!state.symbols.includes(s)) slots.delete(s);
+  for(const s of state.symbols) if(!slots.has(s)){ const used = new Set(slots.values()); let i=0; while(used.has(i)) i++; slots.set(s,i); }
+}
+function availableMetrics(){
+  const keys = new Set();
+  for(const cols of valueIndex.values()) for(const v of cols.values()) for(const [k,x] of Object.entries(v)) if(Number.isFinite(x)) keys.add(k);
+  return [...keys];
+}
+function metricGroups(){
+  const keys = availableMetrics(), known = new Set(GROUPS.flatMap(g => g[2]));
+  const groups = GROUPS.map(([id,name,list]) => [id,name,list.filter(k => keys.includes(k))]).filter(g => g[2].length);
+  const rest = keys.filter(k => !known.has(k));
+  if(rest.length) groups.push(['other','أخرى',rest]);
+  return groups;
+}
+function renderMetrics(){
+  const groups = metricGroups(), active = groups.find(g => g[2].includes(state.metric)) || groups[0];
+  $('metric-groups').innerHTML = groups.map(([id,name]) => `<button type="button" data-group="${id}" aria-pressed="${id===active[0]}">${esc(name)}</button>`).join('');
+  $('metric-groups').hidden = groups.length<2;
+  $('metric-chips').innerHTML = active[2].map(k => `<button type="button" class="cx-chip" data-metric="${esc(k)}" aria-pressed="${k===state.metric}">${esc(label(k))}</button>`).join('');
+}
+function renderYears(){
+  $('years-label').textContent = isSeq() ? 'الأرباع' : 'السنوات';
+  $('year-chips').innerHTML = allYears.map(y => `<button type="button" class="cx-chip" data-year="${esc(y)}" aria-pressed="${state.years.includes(y)}"><span class="n">${esc(lab(y))}</span></button>`).join('');
+  const quick = isSeq() ? [['all','الكل'],['8','آخر 8 أرباع'],['4','آخر 4 أرباع'],['1','آخر ربع']] : [['all','الكل'],['3','آخر 3 سنوات'],['1','آخر سنة']];
+  $('year-quick').innerHTML = quick.map(([n,t]) => `<button type="button" data-years="${n}">${t}</button>`).join('');
+}
+/* صف الفترة: يظهر لكل قطاع له ملف نتائج ربعية؛ البنود تأتي من ملفات القطاع نفسه */
+function periodNote(list){
+  if(!quarterly) return 'لا تتوفر نتائج ربعية لهذا القطاع؛ المقارنة سنوية فقط.';
+  const n = Number(state.quarter);
+  const text = {
+    fy: 'النتائج السنوية كاملة كما في ملف القطاع السنوي.',
+    q: `الربع ${QUARTER_NAMES[n]} وحده (${monthRange(12,n)}) مقارنًا عبر السنوات.`,
+    seq: 'كل ربع مستقل بترتيبه الزمني؛ التغير في الترتيب يقارن بالربع نفسه من السنة السابقة.',
+    h1: 'مجموع الربعين الأول والثاني (يناير – يونيو) لكل سنة، من الأرباع المستقلة.',
+    m9: 'مجموع الأرباع الثلاثة الأولى (يناير – سبتمبر) لكل سنة، من الأرباع المستقلة.'
+  }[state.period];
+  const offYear = state.period==='fy' ? [] : list.filter(c => !isCalendarYear(c.fiscalYearEnd));
+  return text + (offYear.length ? ' ' + offYear.map(c => `سنة ${c.name} المالية تنتهي في ${MONTH_NAMES[c.fiscalYearEnd]}`).join('، ') + '، وأرباعها مرقّمة حسب سنتها المالية كما في أرقام.' : '');
+}
+function renderPeriod(){
+  $('period-seg').innerHTML = PERIOD_OPTIONS.map(([id,name]) => `<button type="button" data-period="${id}" aria-pressed="${id===state.period}" ${id!=='fy'&&!quarterly?'disabled title="لا تتوفر نتائج ربعية لهذا القطاع"':''}>${name}</button>`).join('');
+  $('quarter-seg').hidden = state.period!=='q';
+  $('quarter-seg').innerHTML = [1,2,3,4].map(n => `<button type="button" data-quarter="${n}" aria-pressed="${String(n)===state.quarter}">الربع ${QUARTER_NAMES[n]}</button>`).join('');
+  $('period-note').textContent = periodNote(chosen());
+}
+function periodName(){
+  return state.period==='q' ? `الربع ${QUARTER_NAMES[Number(state.quarter)]}` : PERIOD_OPTIONS.find(([id]) => id===state.period)[1];
+}
+/* العمود الذي يُقارن به: الربع نفسه من السنة السابقة في الأرباع المتتالية، وإلا العمود السابق */
+function prevOf(id){
+  if(isSeq()){ const k = `${Number(id.slice(0,4))-1}Q${id.slice(5)}`; return allYears.includes(k) ? k : null; }
+  return allYears[allYears.indexOf(id)-1] ?? null;
+}
+function renderCompanies(){
+  const full = state.symbols.length>=MAX_COMPANIES, q = state.query.trim();
+  $('company-search').closest('.cx-company-tools').querySelector('.cx-search').hidden = companies.length<=12;
+  $('company-chips').innerHTML = companies.filter(c => !q || state.symbols.includes(c.symbol) || c.name.includes(q) || String(c.symbol).includes(q)).map(c => {
+    const on = state.symbols.includes(c.symbol);
+    return `<button type="button" class="cx-chip" data-symbol="${esc(c.symbol)}" aria-pressed="${on}" ${!on&&full?'disabled':''} style="--c:${on?color(c):'transparent'}"><i></i>${esc(c.name)} <bdi>${esc(c.symbol)}</bdi></button>`;
+  }).join('');
+  $('selection-count').textContent = `${state.symbols.length} من ${companies.length}${full?' · الحد الأقصى':''}`;
+}
+
+/* ---------- أرقام سريعة ---------- */
+function renderFigures(list){
+  const y = state.years.at(-1), first = state.years[0];
+  const withV = list.map(c => ({c, v:valueAt(c,y)})).filter(r => r.v!=null).sort((a,b) => b.v-a.v);
+  const who = c => `<i style="--c:${color(c)}"></i>${esc(c.name)}`;
+  const tiles = [];
+  if(withV.length){
+    const top = withV[0], low = withV.at(-1), avg = withV.reduce((s,r) => s+r.v,0)/withV.length;
+    tiles.push([`الأعلى في ${esc(lab(y))}`, num(top.v), who(top.c)]);
+    tiles.push([`الأدنى في ${esc(lab(y))}`, num(low.v), who(low.c)]);
+    tiles.push([`متوسط الشركات المختارة`, num(avg), `من ${withV.length} شركات · ${esc(unit(state.metric))}`]);
+  }
+  const base = state.years.length>1 ? first : prevOf(y);
+  if(base!=null){
+    const moves = list.map(c => ({c, ch:change(valueAt(c,base),valueAt(c,y))})).filter(r => r.ch);
+    const usePct = moves.length && moves.every(r => r.ch.pct!=null);
+    moves.sort((a,b) => usePct ? b.ch.pct-a.ch.pct : b.ch.diff-a.ch.diff);
+    if(moves.length) tiles.push([`الأكثر ارتفاعًا ${esc(lab(base))} ← ${esc(lab(y))}`, `<span class="n ${dirClass(moves[0].ch.dir)}">${esc(moves[0].ch.text)}</span>`, who(moves[0].c)]);
+  }
+  $('cx-figures').innerHTML = tiles.map(([dt,dd,small]) => `<div class="key-figure"><dt>${dt}</dt><dd>${dd}</dd><small>${small}</small></div>`).join('');
+}
+
+/* ---------- الرسم ---------- */
+function niceTicks(lo,hi,count=5){
+  if(lo===hi){ hi = lo+1; }
+  const raw = (hi-lo)/count, mag = 10**Math.floor(Math.log10(raw)), n = raw/mag;
+  const step = (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;
+  const start = Math.floor(lo/step)*step, end = Math.ceil(hi/step)*step, ticks = [];
+  for(let v=start; v<=end+step/2; v+=step) ticks.push(Math.abs(v)<step/1e6 ? 0 : v);
+  return ticks;
+}
+function axisFmt(v,step){
+  const x = isPct(state.metric) ? v*100 : v, s = isPct(state.metric) ? step*100 : step;
+  return new Intl.NumberFormat('en-US',{maximumFractionDigits: s>=1?0:s>=0.1?1:2}).format(x) + (isPct(state.metric)?'%':'');
+}
+function renderChart(list){
+  const box = $('chart'), W = Math.max(280, box.clientWidth-20), H = matchMedia('(max-width:760px)').matches ? 290 : 340;
+  const yrs = state.years, n = list.length;
+  const vals = list.flatMap(c => yrs.map(y => valueAt(c,y))).filter(v => v!=null);
+  if(!vals.length){ box.innerHTML = `<div class="cx-empty" style="direction:rtl;border:0;margin:0">لا توجد قيم متاحة لهذا البند في السنوات المختارة.</div>`; return; }
+  const bars = state.view==='bars';
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if(bars || (lo>=0 && lo<hi*0.5)) lo = Math.min(0,lo);
+  if(bars) hi = Math.max(0,hi);
+  if(lo===hi){ lo -= Math.abs(lo)*0.1||1; hi += Math.abs(hi)*0.1||1; }
+  const ticks = niceTicks(lo,hi), step = ticks[1]-ticks[0]; lo = ticks[0]; hi = ticks.at(-1);
+  const tickText = ticks.map(t => axisFmt(t,step));
+  // تسميات المحور: سطر واحد إن اتسعت، وإلا سطران («Q3» فوق «2026»)، ويُحذف بعضها عند الازدحام
+  const names = yrs.map(lab), wide = Math.max(...names.map(t => t.length))*6.6+8;
+  const m0 = 14 + Math.max(...tickText.map(t => t.length))*6.2, gw0 = (W-m0-8)/yrs.length;
+  const twoLine = gw0 < wide && names.some(t => t.includes(' '));
+  const part = twoLine ? Math.max(...names.flatMap(t => t.split(' ')).map(t => t.length))*6.6+8 : wide;
+  const every = Math.max(1, Math.ceil(part/gw0));
+  const m = { l: m0, r: 8, t: 20, b: twoLine ? 42 : 30 };
+  const pw = W-m.l-m.r, ph = H-m.t-m.b, gw = pw/yrs.length;
+  const Y = v => m.t + (hi-v)/(hi-lo)*ph, cx = i => m.l + gw*(i+.5);
+  let g = '';
+  ticks.forEach((t,i) => { g += `<line class="${t===0?'zero':'grid'}" x1="${m.l}" x2="${W-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text class="tick" x="${m.l-8}" y="${Y(t)+3.5}" text-anchor="end">${tickText[i]}</text>`; });
+  yrs.forEach((y,i) => {
+    g += `<rect class="band" data-year="${esc(y)}" x="${m.l+gw*i}" y="${m.t-6}" width="${gw}" height="${ph+12}"/>`;
+    if((yrs.length-1-i) % every) return; // يبقى آخر عمود ظاهرًا دائمًا
+    const [a,b] = names[i].split(' ');
+    g += twoLine && b ? `<text class="year" x="${cx(i)}" y="${H-22}" text-anchor="middle">${esc(a)}<tspan x="${cx(i)}" dy="14">${esc(b)}</tspan></text>` : `<text class="year" x="${cx(i)}" y="${H-8}" text-anchor="middle">${esc(names[i])}</text>`;
+  });
+  if(bars){
+    const inner = gw*0.8, slot = inner/n, bw = Math.max(3, Math.min(36, slot-2)), showVal = slot>=42 && n*yrs.length<=18;
+    yrs.forEach((y,i) => list.forEach((c,j) => {
+      const v = valueAt(c,y); if(v==null) return;
+      const x = cx(i) - (n*slot)/2 + j*slot + (slot-bw)/2, y0 = Y(0), y1 = Y(v), h = Math.max(1.5, Math.abs(y1-y0)), r = Math.min(3, bw/2, h);
+      const d = v>=0
+        ? `M${x},${y0}V${y0-h+r}q0,${-r} ${r},${-r}H${x+bw-r}q${r},0 ${r},${r}V${y0}Z`
+        : `M${x},${y0}V${y0+h-r}q0,${r} ${r},${r}H${x+bw-r}q${r},0 ${r},${-r}V${y0}Z`;
+      g += `<path class="mark" data-s="${esc(c.symbol)}" d="${d}" fill="${color(c)}"/>`;
+      if(showVal) g += `<text class="val mark" data-s="${esc(c.symbol)}" x="${x+bw/2}" y="${v>=0 ? y0-h-5 : y0+h+13}" text-anchor="middle">${fmt(v)}</text>`;
+    }));
+  } else {
+    list.forEach(c => {
+      let d = '', pen = false, dots = '';
+      yrs.forEach((y,i) => { const v = valueAt(c,y); if(v==null){ pen = false; return; } d += `${pen?'L':'M'}${cx(i)},${Y(v)}`; pen = true; dots += `<circle class="dot" cx="${cx(i)}" cy="${Y(v)}" r="4.5" fill="${color(c)}"/>`; });
+      g += `<g class="mark" data-s="${esc(c.symbol)}"><path class="line" d="${d}" stroke="${color(c)}"/>${dots}</g>`;
+    });
+  }
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label(state.metric))} حسب ${isSeq() ? 'الربع' : 'السنة'} · ${esc(periodName())}">${g}</svg>`;
+}
+function showTip(year, x, y){
+  const tip = $('cx-tip'), list = chosen();
+  const rows = list.map(c => ({c, v:valueAt(c,year)})).sort((a,b) => (b.v??-Infinity)-(a.v??-Infinity));
+  tip.innerHTML = `<h4>${esc(label(state.metric))} · <span class="n">${esc(lab(year))}</span> · ${esc(unit(state.metric))}</h4>` + rows.map(r => `<div><i style="--c:${color(r.c)}"></i><span>${esc(r.c.name)}</span><b>${num(r.v)}</b></div>`).join('');
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(innerWidth-w-8, x+14 + (x+14+w>innerWidth-8 ? -w-28 : 0))) + 'px';
+  tip.style.top = Math.max(8, Math.min(innerHeight-h-8, y-h/2)) + 'px';
+}
+function hideTip(){ $('cx-tip').hidden = true; document.querySelectorAll('.cx-chart .band.on').forEach(b => b.classList.remove('on')); }
+function highlight(symbol){
+  for(const el of [$('chart'), $('rank-list')]) el.classList.toggle('dim', !!symbol);
+  document.querySelectorAll('.cx-page [data-s]').forEach(el => el.classList.toggle('hl', el.dataset.s===symbol));
+  document.querySelectorAll('#chart-legend button').forEach(b => b.classList.toggle('on', b.dataset.s===symbol));
+}
+
+/* ---------- الترتيب ---------- */
+function renderRank(list){
+  const y = state.years.at(-1), prev = prevOf(y);
+  const rows = list.map(c => ({c, v:valueAt(c,y)})).sort((a,b) => (b.v??-Infinity)-(a.v??-Infinity));
+  const vs = rows.map(r => r.v).filter(v => v!=null), lo = Math.min(0,...vs), hi = Math.max(0,...vs), span = hi-lo || 1;
+  $('rank-title').textContent = `الترتيب في ${lab(y)}`;
+  $('rank-sub').textContent = prev!=null ? `مع التغير عن ${lab(prev)}` : '';
+  $('rank-list').innerHTML = rows.map((r,i) => {
+    const ch = prev!=null ? change(valueAt(r.c,prev), r.v) : null;
+    const fill = r.v==null ? '' : `<span class="fill" style="left:${(Math.min(r.v,0)-lo)/span*100}%;width:${Math.abs(r.v)/span*100}%"></span>`;
+    return `<li data-s="${esc(r.c.symbol)}" style="--c:${color(r.c)}"><span class="pos">${r.v==null?'—':i+1}</span><span class="who">${esc(r.c.name)} <bdi>${esc(r.c.symbol)}</bdi></span><span class="fig">${num(r.v)}</span><span class="track">${fill}${lo<0?`<span class="axis0" style="left:${-lo/span*100}%"></span>`:''}</span>${ch?`<span class="delta"><span class="n ${dirClass(ch.dir)}">${arrow(ch.dir)} ${esc(ch.text)}</span> عن <span class="n">${esc(lab(prev))}</span></span>`:''}</li>`;
+  }).join('');
+}
+
+/* ---------- الجدول ---------- */
+function spark(c){
+  const pts = state.years.map((y,i) => [i,valueAt(c,y)]).filter(p => p[1]!=null);
+  if(pts.length<2) return '';
+  const W=76,H=24,p=3, vs=pts.map(p=>p[1]), lo=Math.min(...vs), hi=Math.max(...vs), span=hi-lo||1, n=state.years.length-1||1;
+  const X = i => p+i/n*(W-2*p), Yv = v => H-p-(v-lo)/span*(H-2*p);
+  const zero = lo<0 && hi>0 ? `<line x1="0" x2="${W}" y1="${Yv(0)}" y2="${Yv(0)}"/>` : '';
+  const last = pts.at(-1);
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${zero}<path d="${pts.map((q,i)=>`${i?'L':'M'}${X(q[0])},${Yv(q[1])}`).join('')}"/><circle cx="${X(last[0])}" cy="${Yv(last[1])}" r="2.5"/></svg>`;
+}
+function renderTable(list){
+  const yrs = state.years, multi = yrs.length>1, a = yrs[0], b = yrs.at(-1);
+  if(state.sort.key!=='chg' && state.sort.key!=='name' && !yrs.includes(state.sort.key)) state.sort = {key:b,dir:-1};
+  if(state.sort.key==='chg' && !multi) state.sort = {key:b,dir:-1};
+  const {key,dir} = state.sort;
+  const keyOf = c => key==='name' ? null : key==='chg' ? (change(valueAt(c,a),valueAt(c,b))?.diff ?? null) : valueAt(c,key);
+  const rows = [...list].sort((p,q) => {
+    if(key==='name') return -dir*p.name.localeCompare(q.name,'ar');
+    const pv = keyOf(p), qv = keyOf(q);
+    if(pv==null || qv==null) return (pv==null)-(qv==null);
+    return dir*(pv-qv);
+  });
+  const best = new Map(yrs.map(y => [y, Math.max(...list.map(c => valueAt(c,y) ?? -Infinity))]));
+  const head = (k,text) => `<th><button type="button" data-sort="${k}" class="${key===k?'sorted'+(dir>0?' asc':''):''}">${text}</button></th>`;
+  $('table-sub').textContent = `${label(state.metric)} · ${periodName()} · ${unit(state.metric)} · اضغط على عنوان العمود للترتيب`;
+  $('cx-table').innerHTML = `<thead><tr>${head('name','الشركة')}${yrs.map(y => head(y,`<span class="n">${esc(lab(y))}</span>`)).join('')}${multi?head('chg',`التغير <span class="n cx-th-range">${esc(lab(a))} ← ${esc(lab(b))}</span>`)+'<th>الاتجاه</th>':''}</tr></thead><tbody>${rows.map(c => {
+    const ch = multi ? change(valueAt(c,a),valueAt(c,b)) : null;
+    return `<tr data-s="${esc(c.symbol)}" style="--c:${color(c)}"><th scope="row"><span><i></i>${esc(c.name)} <bdi>${esc(c.symbol)}</bdi></span></th>${yrs.map(y => { const v = valueAt(c,y); return `<td class="${v==null?'miss':v<0?'neg':''}${v!=null&&v===best.get(y)&&list.length>1?' best':''}">${num(v)}</td>`; }).join('')}${multi?`<td class="chg">${ch?`<span class="n ${dirClass(ch.dir)}">${esc(ch.text)}</span>`:'<span class="miss">—</span>'}</td><td>${spark(c)}</td>`:''}</tr>`;
+  }).join('')}</tbody>`;
+}
+
+/* ---------- التجميع ---------- */
+function render(){
+  renderPeriod(); renderMetrics(); renderYears(); renderCompanies();
+  $('chart-view').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view===state.view)));
+  // قطاع بشركة واحدة (كالخدمات المالية) يُعرض لمقارنة فترات الشركة نفسها
+const list = chosen(), ok = list.length>=Math.min(2,companies.length) && list.length>0 && state.years.length>=1;
+  $('cx-results').hidden = !ok; $('cx-empty').hidden = ok;
+  const sectorName = SECTORS.find(([,s]) => s===state.sector)?.[0] || '';
+  if(!ok){
+    $('cx-empty').textContent = list.length<2 ? 'اختر شركتين على الأقل لعرض المقارنة.' : `اختر ${isSeq() ? 'ربعًا' : 'سنة'} واحدة على الأقل لعرض المقارنة.`;
+    $('cx-summary').textContent = `قطاع ${sectorName}`;
+    writeHash(); return;
+  }
+  const span = state.years.length>1 ? `${lab(state.years[0])} – ${lab(state.years.at(-1))}` : lab(state.years[0]);
+  $('cx-summary').innerHTML = `<b>${esc(label(state.metric))}</b> · ${esc(periodName())} · ${esc(unit(state.metric))} · ${list.length===1 ? 'شركة واحدة' : `${list.length} شركات`} من قطاع ${esc(sectorName)} · <span class="n">${esc(span)}</span>`;
+  $('chart-title').textContent = label(state.metric);
+  $('chart-sub').textContent = `${periodName()} · ${unit(state.metric)} · مرّر على ${isSeq() ? 'الربع' : 'السنة'} لعرض القيم`;
+  $('chart-legend').innerHTML = list.map(c => `<button type="button" data-s="${esc(c.symbol)}" style="--c:${color(c)}"><i></i>${esc(c.name)}</button>`).join('');
+  renderFigures(list); renderChart(list); renderRank(list); renderTable(list);
+  writeHash();
+}
+
+/* ---------- البيانات ---------- */
+let DATA = null, FIN = null;
+async function fetchSector(key){
+  const sector = DATA.sectors.find(x => x.key === key);
+  const ys = new Map(); // السنة المالية → عدد الشركات التي لها نتائج فيها
+  const comps = [...sector.stocks].sort((a,b) => (b.marketCap||0)-(a.marketCap||0)).map(stock => {
+    const an = FIN.companies[stock.symbol]?.annual || {}, years = (an.years || []).slice(0,6);
+    const pick = (k,i) => { const v = an[k]?.[i]; return typeof v === 'number' && Number.isFinite(v) ? v : null; };
+    const rows = years.map((y,i) => {
+      if (pick('revenue',i) != null || pick('netIncome',i) != null) ys.set(String(y), (ys.get(String(y)) || 0) + 1);
+      const rev = pick('revenue',i), gp = pick('grossProfit',i), ni = pick('netIncome',i), fcf = pick('freeCashFlow',i);
+      const M = v => v == null ? null : v/1e6;
+      const values = { revenue:M(rev), grossProfit:M(gp), ebitda:M(pick('ebitda',i)), netIncome:M(ni), eps:pick('eps',i), epsBasic:pick('epsBasic',i), dps:pick('dps',i),
+        freeCashFlow:M(fcf), capex:M(pick('capex',i)), assets:M(pick('assets',i)), debt:M(pick('debt',i)),
+        grossMargin: gp != null && rev ? gp/rev : null, netMargin: ni != null && rev ? ni/rev : null, fcfMargin: fcf != null && rev ? fcf/rev : null };
+      return { year:String(y), values };
+    });
+    return { symbol: stock.symbol, name: stock.name, years: rows };
+  });
+  // سنوات مالية تنتهي في أشهر مختلفة: نُبقي السنوات التي أعلنتها نصف شركات القطاع على الأقل حتى لا تظهر سنة لشركة واحدة فقط
+  const need = Math.ceil(comps.length / 2);
+  return { annual: { companies: comps, years: [...ys].filter(([, n]) => n >= need).map(([y]) => y).sort().slice(-5) }, quarterly: null };
+}
+// الأعمدة والقيم: سنوي فقط
+function buildIndex(){
+  colLabels = new Map();
+  state.period = 'fy';
+  companies = annual.companies;
+  allYears = (annual.years || []).map(String);
+  valueIndex = new Map(companies.map(c => [c.symbol, new Map((c.years||[]).map(r => [String(r.year), r.values||{}]))]));
+}
+// يعيد بناء الأعمدة مع إبقاء ما يمكن إبقاؤه من البند والسنوات والشركات
+function applyData(wanted={}){
+  buildIndex();
+  const keys = availableMetrics();
+  state.metric = keys.includes(wanted.m) ? wanted.m : keys.includes(state.metric) ? state.metric : keys.includes('netIncome') ? 'netIncome' : keys[0];
+  const want = wanted.y ?? state.years, ys = want.filter(y => allYears.includes(y)).sort();
+  state.years = ys.length ? ys : isSeq() ? allYears.slice(-SEQ_DEFAULT) : [...allYears];
+  const wantC = (wanted.c ?? state.symbols).filter(s => companies.some(c => c.symbol===s));
+  setSymbols(wantC.length>=2 ? wantC : wantC.length===1 ? [...wantC, ...companies.filter(c => c.symbol!==wantC[0]).slice(0,2).map(c => c.symbol)] : companies.slice(0,3).map(c => c.symbol));
+  state.sort = {key:null,dir:-1};
+}
+async function loadSector(slug, wanted={}){
+  state.sector = slug; $('sector-select').value = slug;
+  ({ annual, quarterly } = await fetchSector(slug));
+  if(state.sector!==slug) return; // اختار المستخدم قطاعًا آخر أثناء التحميل
+  slots = new Map(); state.query = ''; $('company-search').value = '';
+  state.symbols = []; state.years = [];
+  applyData({ m:wanted.m, y:wanted.y || [], c:wanted.c || [] });
+  if(wanted.v==='lines' || wanted.v==='bars') state.view = wanted.v;
+  render();
+}
+
+/* ---------- الأحداث ---------- */
+$('metric-groups').addEventListener('click', e => { const b = e.target.closest('[data-group]'); if(!b) return; const g = metricGroups().find(g => g[0]===b.dataset.group); if(g && !g[2].includes(state.metric)){ state.metric = g[2][0]; render(); } });
+$('metric-chips').addEventListener('click', e => { const b = e.target.closest('[data-metric]'); if(b){ state.metric = b.dataset.metric; render(); } });
+$('period-seg').addEventListener('click', e => { const b = e.target.closest('[data-period]'); if(!b || b.disabled || b.dataset.period===state.period) return; chosenPeriod = b.dataset.period; applyData(); render(); });
+$('quarter-seg').addEventListener('click', e => { const b = e.target.closest('[data-quarter]'); if(!b || b.dataset.quarter===state.quarter) return; state.quarter = b.dataset.quarter; applyData(); render(); });
+$('year-chips').addEventListener('click', e => { const b = e.target.closest('[data-year]'); if(!b) return; const y = b.dataset.year; state.years = (state.years.includes(y) ? state.years.filter(v => v!==y) : [...state.years,y]).sort(); render(); });
+$('year-quick').addEventListener('click', e => { const b = e.target.closest('[data-years]'); if(!b) return; state.years = b.dataset.years==='all' ? [...allYears] : allYears.slice(-Number(b.dataset.years)); render(); });
+$('company-chips').addEventListener('click', e => { const b = e.target.closest('[data-symbol]'); if(!b) return; const s = b.dataset.symbol; setSymbols(state.symbols.includes(s) ? state.symbols.filter(v => v!==s) : [...state.symbols,s]); render(); });
+$('company-search').addEventListener('input', e => { state.query = e.target.value; renderCompanies(); });
+document.querySelector('[data-pick]').parentElement.addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]'); if(!b) return;
+  if(b.dataset.pick==='reset') setSymbols(companies.slice(0,3).map(c => c.symbol));
+  else { const y = state.years.at(-1) ?? allYears.at(-1), sign = b.dataset.pick==='top5' ? -1 : 1;
+    setSymbols(companies.map(c => ({c, v:valueAt(c,y)})).filter(r => r.v!=null).sort((p,q) => sign*(p.v-q.v)).slice(0,5).map(r => r.c.symbol)); }
+  render();
+});
+$('chart-view').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if(b){ state.view = b.dataset.view; render(); } });
+$('cx-table').addEventListener('click', e => { const b = e.target.closest('[data-sort]'); if(!b) return; const k = b.dataset.sort; state.sort = { key:k, dir: state.sort.key===k ? -state.sort.dir : -1 }; renderTable(chosen()); });
+$('chart').addEventListener('pointermove', e => { const band = e.target.closest?.('.band') || document.elementsFromPoint(e.clientX,e.clientY).find(el => el.classList?.contains('band')); if(!band){ hideTip(); return; } document.querySelectorAll('.cx-chart .band.on').forEach(b => b!==band && b.classList.remove('on')); band.classList.add('on'); showTip(band.dataset.year, e.clientX, e.clientY); });
+$('chart').addEventListener('pointerleave', hideTip);
+addEventListener('scroll', hideTip, {passive:true});
+for(const id of ['chart-legend','rank-list','cx-table']){
+  $(id).addEventListener('pointerover', e => { const el = e.target.closest('[data-s]'); if(el) highlight(el.dataset.s); });
+  $(id).addEventListener('pointerleave', () => highlight(null));
+}
+$('cx-share').addEventListener('click', async e => { const b = e.currentTarget, t = b.textContent; try{ await navigator.clipboard.writeText(location.href); b.textContent = 'تم نسخ الرابط ✓'; }catch{ b.textContent = 'انسخ الرابط من شريط العنوان'; } setTimeout(() => b.textContent = t, 1800); });
+let lastW = 0;
+new ResizeObserver(() => { const w = $('chart').clientWidth; if(w && w!==lastW && !$('cx-results').hidden){ lastW = w; renderChart(chosen()); } }).observe($('chart'));
+const fail = e => { $('cx-results').hidden = true; $('cx-empty').hidden = false; $('cx-empty').textContent = 'تعذر تحميل بيانات القطاع.'; console.error(e); };
+$('sector-select').addEventListener('change', e => loadSector(e.target.value).catch(fail));
+(async () => {
+  try {
+    [DATA, FIN] = await Promise.all([fetch('data.json').then(r => r.json()), fetch('financials.json').then(r => r.json())]);
+  } catch (e) { fail(e); return; }
+  SECTORS = [...DATA.sectors].sort((a,b) => a.name.localeCompare(b.name,'ar')).map(x => [x.name, x.key]);
+  $('sector-select').innerHTML = SECTORS.map(([name,slug]) => `<option value="${esc(slug)}">${esc(name)}</option>`).join('');
+  state.sector = DATA.sectors.find(x => x.key === 'Electronic Technology') ? 'Electronic Technology' : SECTORS[0][1];
+  const wanted = readHash();
+  chosenPeriod = 'fy';
+  loadSector(state.sector, wanted).catch(fail);
+})();

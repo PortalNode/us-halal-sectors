@@ -1,0 +1,8 @@
+{
+  "name": "قطاعات السوق الأمريكي الشرعي",
+  "short_name": "السوق الأمريكي الشرعي",
+  "icons": [{"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml"}],
+  "theme_color": "#0d2432",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}

@@ -1,0 +1,412 @@
+/* بطاقة «السهم» تحت نبذة الشركة: أرقام السهم ثم شارت السهم (company-chart.js). تعتمد ألوان company-profile.css */
+:root{--cq-up:#22c55e;--cq-down:#f05252;--cq-flat:var(--pf-muted)}
+:root[data-theme="light"]{--cq-up:#15803d;--cq-down:#d92d20}
+
+.company-quote{border-top-color:var(--pf-line)}
+.cq-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 16px;border-bottom:1px solid var(--pf-line)}
+.cq-head h3{margin:0;font-size:13px;font-weight:800;color:var(--pf-gold)}
+.cq-up{color:var(--cq-up)}.cq-down{color:var(--cq-down)}.cq-flat{color:var(--cq-flat)}
+
+/* الأرقام: صف من ست خانات (3 × 2 على الأجهزة المتوسطة، 2 × 3 على الجوال) */
+.cq-figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--pf-line)}
+.cq-figures .cq-tile:nth-child(3n){border-left:0}
+.cq-figures .cq-tile:nth-child(-n+3){border-bottom:1px solid var(--pf-line)}
+.cq-figures .cq-tile:nth-child(n+4){border-bottom:0}
+.cq-tile{padding:14px 16px;border-left:1px solid var(--pf-line);min-width:0}
+.cq-tile:last-child{border-left:0}
+.cq-label{display:block;font-size:10px;color:var(--pf-muted);font-weight:700;margin-bottom:6px}
+.cq-value{display:flex;align-items:baseline;gap:5px;font-size:21px;font-weight:800;line-height:1.15;color:var(--pf-ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cq-value bdi{direction:ltr}
+.cq-value small{font-size:10.5px;font-weight:700;color:var(--pf-muted)}
+.cq-price .cq-value{font-size:25px}
+.cq-tile.cq-up .cq-value{color:var(--cq-up)}.cq-tile.cq-down .cq-value{color:var(--cq-down)}
+
+/* الشارت */
+.cq-chart-panel{padding:12px 16px 10px;background:var(--pf-bg2);min-width:0}
+/* الأرقام على اليمين ومربع الشارت الصغير على اليسار (في RTL يأتي الشارت بعد الأرقام في الكود) */
+.cq-body{display:flex;align-items:stretch;min-width:0}
+.cq-body .cq-figures{flex:1 1 auto;min-width:0;border-bottom:0}
+.cq-body .cq-tile{display:flex;flex-direction:column;justify-content:center}
+.cq-mini-slot{flex:none;box-sizing:border-box;height:clamp(240px,25vw,300px);width:calc(clamp(240px,25vw,300px) * 1.2);padding:10px 12px;border-inline-start:1px solid var(--pf-line);background:var(--pf-bg2);min-width:0}
+/* الشارت الصغير: الأزرار، وسطر O H L C، والشارت مع محور الأسعار على اليمين ومحور الوقت أسفله */
+.cq-mini{display:flex;flex-direction:column;height:100%;min-width:0;color:inherit}
+.cq-mini a:focus-visible,.cq-mini button:focus-visible{outline:2px solid var(--pf-gold);outline-offset:2px}
+.cq-mini-ranges{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
+.cq-mini-ranges button{border:1px solid var(--pf-line);background:transparent;color:var(--pf-muted);font:inherit;font-size:10px;font-weight:700;line-height:1.3;padding:2px 6px;border-radius:4px;cursor:pointer}
+.cq-mini-ranges button:hover{color:var(--pf-ink)}
+.cq-mini-ranges button[aria-pressed="true"]{background:var(--pf-gold-soft);color:var(--pf-gold);border-color:var(--pf-gold)}
+.cq-mini-ohlc{display:flex;flex-wrap:wrap;gap:0 9px;min-height:16px;font-size:10px;color:var(--pf-muted);font-variant-numeric:tabular-nums}
+.cq-mini-ohlc bdi{color:var(--pf-ink);font-weight:700}
+.cq-mini-when{margin-inline-end:4px;color:var(--pf-ink);font-weight:700}
+.cq-mini-body{display:flex;flex:1 1 auto;min-height:0;margin-top:4px}
+.cq-mini-plot-link{position:relative;flex:1 1 auto;min-width:0;display:block;color:inherit;text-decoration:none;cursor:crosshair}
+.cq-mini-plot{position:absolute;inset:0;display:block}
+.cq-mini-plot svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+.cq-mini-plot-link:hover .cq-mini-line{stroke-width:2}
+.cq-mini-area{fill:var(--pf-gold);fill-opacity:.14}
+.cq-mini-line{fill:none;stroke:var(--pf-gold);stroke-width:1.5;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.cq-mini-dot{position:absolute;left:100%;width:7px;height:7px;margin:0;border-radius:50%;background:var(--pf-gold);border:2px solid var(--pf-bg2);transform:translate(-50%,-50%);box-sizing:content-box}
+.cq-mini-cross{position:absolute;top:0;bottom:0;width:0;border-inline-start:1px dashed var(--pf-muted);opacity:.8;pointer-events:none}
+.cq-mini-hline{position:absolute;inset-inline-start:0;inset-inline-end:0;height:0;border-top:1px dashed var(--pf-muted);opacity:.8;pointer-events:none}
+.cq-mini-cross[hidden],.cq-mini-hline[hidden],.cq-mini-ytag[hidden],.cq-mini-xtag[hidden]{display:none}
+.cq-mini-ytag,.cq-mini-xtag{position:absolute;z-index:2;padding:1px 4px;border-radius:3px;background:var(--pf-ink);color:var(--pf-bg);font-weight:700;white-space:nowrap;pointer-events:none;font-size:9.5px}
+.cq-mini-ytag{inset-inline-start:0;transform:translateY(-50%)}
+.cq-mini-xtag{top:0;transform:translateX(-50%)}
+.cq-mini-yaxis{position:relative;flex:none;width:38px;margin-inline-start:4px;font-size:9.5px;color:var(--pf-muted);font-variant-numeric:tabular-nums}
+.cq-mini-yaxis span{position:absolute;inset-inline-start:0;transform:translateY(-50%);white-space:nowrap}
+.cq-mini-xaxis{position:relative;height:14px;margin-inline-end:42px;margin-top:4px;font-size:9.5px;color:var(--pf-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cq-mini-xaxis span{position:absolute;top:0;transform:translateX(-50%)}
+.cq-mini-xaxis .cq-mini-x-first{transform:none}
+.cq-mini-xaxis .cq-mini-x-last{transform:translateX(-100%)}
+.cq-mini-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:6px;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.cq-mini-meta bdi{direction:ltr}
+.cq-mini-open{font-size:10.5px;font-weight:700;color:var(--pf-gold);text-decoration:none}
+.cq-mini-open:hover{text-decoration:underline}
+.cq-mini-empty{margin:auto 0;font-size:11px}
+.cq-mini-slot .cq-empty{margin:auto 0}
+.cq-mini-slot .cq-empty{margin:auto 0}
+@media (max-width:720px){
+  .cq-body{flex-direction:column}
+  .cq-mini-slot{width:100%;aspect-ratio:auto;display:flex;justify-content:center;border-inline-start:0;border-top:1px solid var(--pf-line)}
+  .cq-mini{width:min(100%,300px);height:auto}
+  .cq-mini-body{height:220px;flex:none}
+}
+.cq-range{display:inline-flex;border:1px solid var(--pf-line)}
+.cq-range button{border:0;background:transparent;color:var(--pf-muted);font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer}
+.cq-range button:hover{color:var(--pf-ink)}
+.cq-range button[aria-pressed="true"]{background:var(--pf-gold-soft);color:var(--pf-gold)}
+.cq-range-change{font-size:11.5px;color:var(--pf-muted)}
+.cq-range-change span{font-weight:800}
+.cq-range-change bdi{direction:ltr}
+.cq-source{margin:6px 0 0;font-size:10px;color:var(--pf-muted)}
+.cq-empty{margin:40px 0;text-align:center;font-size:11.5px;color:var(--pf-muted)}
+
+.cc-toolbar{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
+.cc-change{margin-inline-start:0}
+/* البحث عن سهم في أول الشريط، ومجموعات النوع والفترة والمدة في وسطه */
+.cc-groups{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-inline:auto}
+.cc-end{display:flex;align-items:center;gap:10px}
+@media (max-width:1280px){.cc-full-btn span{display:none}.cc-full-btn{padding:5px 7px}}
+.cc-search{position:relative}
+.cc-search-btn{display:inline-flex;align-items:center;gap:7px;width:210px;border:1px solid var(--pf-line);border-radius:6px;background:var(--pf-bg);color:var(--pf-ink);font:inherit;font-size:12px;padding:5px 10px;cursor:pointer;text-align:start}
+.cc-search-btn:hover,.cc-search-btn[aria-expanded="true"]{border-color:var(--pf-gold)}
+.cc-search-btn svg{flex:none;color:var(--pf-muted)}
+.cc-search-btn b{direction:ltr;font-variant-numeric:tabular-nums;font-weight:800}
+.cc-search-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--pf-muted);font-weight:700}
+.cc-search-pop{position:absolute;top:calc(100% + 6px);inset-inline-start:0;z-index:40;width:340px;max-width:calc(100vw - 32px);padding:8px;background:var(--pf-bg);border:1px solid var(--pf-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.cc-search-pop[hidden]{display:none}
+.cc-search-pop input{display:block;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--pf-line);border-radius:6px;background:var(--pf-bg2);color:var(--pf-ink);font:inherit;font-size:13px}
+.cc-search-pop input:focus{outline:none;border-color:var(--pf-gold)}
+.cc-search-list{list-style:none;margin:6px 0 0;padding:0;max-height:320px;overflow-y:auto}
+.cc-search-list li{display:grid;grid-template-columns:52px 1fr;grid-template-areas:"sym name" "sym sector";align-items:center;column-gap:10px;padding:6px 8px;border-radius:5px;cursor:pointer}
+.cc-search-list li[aria-selected="true"]{background:var(--pf-line)}
+.cc-search-list .cc-sym{grid-area:sym;direction:ltr;text-align:center;padding:3px 0;border:1px solid var(--pf-line);border-radius:4px;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--pf-ink)}
+.cc-search-list li span{grid-area:name;font-size:12.5px;font-weight:700;color:var(--pf-ink)}
+.cc-search-list li small{grid-area:sector;font-size:10.5px;color:var(--pf-muted)}
+.cc-search-list li.cc-current .cc-sym{border-color:var(--pf-gold);color:var(--pf-gold)}
+.cc-search-list li.cc-none{display:block;padding:14px 8px;text-align:center;font-size:12px;color:var(--pf-muted);cursor:default}
+.cc-legend{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;min-height:22px;margin:10px 0 2px;font-size:11px;color:var(--pf-muted)}
+.cc-legend b{color:var(--pf-ink);font-size:11.5px}
+.cc-legend bdi{direction:ltr;font-variant-numeric:tabular-nums;color:var(--pf-ink);font-weight:700}
+.cc-legend .cq-up bdi{color:var(--cq-up)}.cc-legend .cq-down bdi{color:var(--cq-down)}
+.cc-legend .cc-ind bdi{color:var(--c)}
+/* الارتفاع: الشارت الرئيسي ثم 110px لكل لوحة مؤشر (RSI، MACD) */
+.cc-chart{--cc-base:410px;position:relative;height:calc(var(--cc-base) + var(--cc-panes,0) * 110px)}
+.cc-chart.cc-drawing{cursor:crosshair;touch-action:none}
+.cc-hint{margin:6px 0 0;font-size:11px;color:var(--pf-gold);font-weight:700}
+.cc-hint[hidden]{display:none}
+.cc-flag-note{color:var(--pf-gold)}
+.cc-est{color:var(--pf-gold);font-size:.85em}
+.cc-away{margin:6px 0 0;padding:6px 10px;border:1px solid var(--pf-gold);border-radius:6px;font-size:12px;color:var(--pf-ink);background:color-mix(in srgb,var(--pf-gold) 10%,transparent)}
+.cc-away a,.cc-away button{color:var(--pf-gold);font:inherit;font-weight:600;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+/* الشريط الجانبي على يسار الشارت كما في TradingView: أدوات الرسم والمغناطيس والمؤشرات أيقوناتٍ، وأسماؤها في تلميح */
+.cc-body{position:relative;padding-left:48px;margin-top:8px}
+.cc-side{position:absolute;left:0;top:0;bottom:0;width:40px;display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border-right:1px solid var(--pf-line)}
+.cc-side::-webkit-scrollbar{display:none}
+.cc-side button{position:relative;flex:none;display:grid;place-items:center;width:32px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--pf-ink);cursor:pointer}
+.cc-side button:hover{background:var(--pf-line)}
+.cc-side button[aria-pressed="true"],.cc-side button[aria-expanded="true"]{background:var(--pf-gold-soft);color:var(--pf-gold)}
+.cc-side button:disabled{opacity:.35;cursor:default;background:transparent}
+.cc-side [data-menu]::after{content:"";position:absolute;right:3px;bottom:3px;border:2.5px solid transparent;border-right-color:currentColor;border-bottom-color:currentColor;opacity:.55}
+.cc-side hr{flex:none;width:24px;margin:3px 0;border:0;border-top:1px solid var(--pf-line)}
+.cc-main .cc-legend{margin-top:0}
+.cc-tip{position:absolute;left:46px;z-index:31;transform:translateY(-50%);padding:5px 9px;border-radius:5px;background:var(--pf-ink);color:var(--pf-bg);font-size:11.5px;font-weight:700;white-space:nowrap;pointer-events:none}
+.cc-flyout{position:absolute;left:46px;z-index:30;width:250px;max-width:calc(100vw - 90px);padding:6px;background:var(--pf-bg);border:1px solid var(--pf-line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.cc-flyout[hidden],.cc-tip[hidden]{display:none}
+.cc-flyout b{display:block;padding:4px 8px 6px;font-size:11px;color:var(--pf-muted)}
+.cc-flyout button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;border:0;border-radius:5px;background:transparent;color:var(--pf-ink);font:inherit;font-size:12px;font-weight:700;text-align:start;cursor:pointer}
+.cc-flyout button:hover{background:var(--pf-line)}
+.cc-flyout button i{width:12px;height:3px;border-radius:2px;flex:none}
+.cc-flyout button small{display:block;margin-top:2px;color:var(--pf-muted);font-size:10.5px;font-weight:400}
+.cc-flyout button::after{content:"";flex:none;width:14px;margin-inline-start:auto;text-align:center}
+.cc-flyout button[aria-pressed="true"]::after{content:"✓";color:var(--pf-gold);font-weight:800}
+/* إعادة تعيين العرض: زر عائم أسفل الشارت يظهر عند المرور عليه (ودائمًا على اللمس) كما في TradingView */
+.cc-stage{position:relative}
+.cc-float{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);display:flex;gap:6px;z-index:5;opacity:0;transition:opacity .15s}
+.cc-stage:hover .cc-float,.cc-float:focus-within{opacity:1}
+@media (hover:none){.cc-float{opacity:.85}}
+.cc-float button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--pf-line);border-radius:50%;background:var(--pf-bg);color:var(--pf-ink);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.cc-float button:hover{border-color:var(--pf-gold);color:var(--pf-gold)}
+/* ملء الشاشة */
+.cc-full-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--pf-line);background:transparent;color:var(--pf-muted);font:inherit;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer}
+.cc-full-btn:hover,.cc-full-btn[aria-pressed="true"]{color:var(--pf-gold);border-color:var(--pf-gold)}
+.cq-chart-panel.cc-full{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;overflow:auto;padding:12px 16px;background:var(--pf-bg2)}
+.cq-chart-panel.cc-full .cc-body{flex:1 1 auto;display:flex;flex-direction:column;min-height:300px}
+.cq-chart-panel.cc-full .cc-main{flex:1 1 auto;display:flex;flex-direction:column}
+.cq-chart-panel.cc-full .cc-stage{flex:1 1 auto;min-height:240px}
+.cq-chart-panel.cc-full .cc-chart{position:absolute;inset:0;height:auto}
+html.cc-lock,html.cc-lock body{overflow:hidden}
+/* مكتبة الشارت ترسم داخل جدول: نعزله عن تنسيقات جداول الموقع (عرض أدنى، تخطيط ثابت، حدود) */
+.company-quote .cc-chart table{width:auto!important;min-width:0!important;max-width:none!important;table-layout:auto!important;border:0!important;border-collapse:separate!important;margin:0!important;background:none!important}
+.company-quote .cc-chart :is(tr,td,th){border:0!important;padding:0!important;background:none!important;position:static;box-shadow:none!important}
+
+@media (max-width:980px){
+  .cq-figures{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .cq-tile:nth-child(-n+3){border-bottom:1px solid var(--pf-line)}
+  .cq-tile:nth-child(3n){border-left:0}
+  .cc-chart{--cc-base:300px}
+}
+@media (max-width:520px){
+  .cq-figures{grid-template-columns:1fr 1fr}
+  .cq-tile{border-bottom:1px solid var(--pf-line)}
+  .cq-tile:nth-child(3n){border-left:1px solid var(--pf-line)}
+  .cq-tile:nth-child(2n){border-left:0}
+  .cq-tile:nth-last-child(-n+2){border-bottom:0}
+  .cq-value{font-size:18px}.cq-price .cq-value{font-size:21px}
+  .cc-change{margin-inline-start:0}
+  .cc-end{width:100%;justify-content:space-between}
+  .cc-full-btn span{display:none}
+  .cc-search,.cc-search-btn{width:100%}
+  .cc-groups{margin-inline:0}
+  .cc-chart{--cc-base:260px}
+}
+
+/* إعدادات فيبوناتشي */
+.cc-fib-settings{margin:10px 0 4px;padding:12px;border:1px solid var(--pf-line);background:var(--pf-bg)}
+.cc-fib-settings[hidden]{display:none}
+.cc-fs-head{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;margin-bottom:10px;font-size:11px;color:var(--pf-muted)}
+.cc-fs-head b{font-size:12.5px;color:var(--pf-gold)}
+.cc-fs-head button{border:1px solid var(--pf-line);background:transparent;color:var(--pf-muted);font:inherit;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer}
+.cc-fs-head button:hover{color:var(--pf-ink);border-color:var(--pf-muted)}
+.cc-fs-head [data-fib-reset]{margin-inline-start:auto}
+.cc-fs-levels{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px}
+.cc-fs-level{display:flex;align-items:center;gap:6px}
+.cc-fs-level input[type=checkbox],.cc-fs-check input{width:16px;height:16px;accent-color:var(--pf-gold);margin:0}
+.cc-fs-level input[type=number]{width:78px;min-height:28px;padding:3px 8px;border:1px solid var(--pf-line);background:var(--pf-bg2);color:var(--pf-ink);font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:left}
+.cc-fs-level input[type=checkbox]:not(:checked)~input{opacity:.45}
+.cc-fs-level input[type=color]{width:30px;height:28px;padding:2px;border:1px solid var(--pf-line);background:var(--pf-bg2);cursor:pointer}
+.cc-fs-options{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--pf-line);font-size:11.5px;color:var(--pf-ink)}
+.cc-fs-options label{display:inline-flex;align-items:center;gap:6px}
+.cc-fs-options select{min-height:28px;padding:3px 8px;border:1px solid var(--pf-line);background:var(--pf-bg2);color:var(--pf-ink);font:inherit;font-size:11.5px}
+.cc-chips [data-fibset][aria-expanded="true"]{border-color:var(--pf-gold);color:var(--pf-ink)}
+.cc-chips [data-delete]{border-style:dashed}
+.cc-chips [data-delete]:disabled{opacity:.4;cursor:default}
+.cc-chips [data-delete]:not(:disabled){color:var(--cq-down);border-color:var(--cq-down)}
+
+/* سطر حالة كل مؤشر أعلى لوحته كما في TradingView: الاسم والمدخلات والقيم، وأزرار الإخفاء والإعدادات والحذف عند المرور أو التحديد */
+.cc-ilegend{position:absolute;left:0;right:0;top:0;height:0;z-index:4;pointer-events:none}
+/* لا تتجاوز مقياس السعر على اليمين، وتلتف الأزرار على الشاشات الضيقة */
+.cc-igroup{position:absolute;left:8px;right:66px;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.cc-irow{pointer-events:auto;display:flex;flex-wrap:wrap;max-width:100%;box-sizing:border-box;align-items:center;gap:2px 7px;min-height:24px;padding:1px 5px;border:1px solid transparent;border-radius:5px;font-size:11.5px;color:var(--pf-ink);white-space:nowrap;background:color-mix(in srgb,var(--pf-bg2) 72%,transparent)}
+.cc-irow:hover{border-color:var(--pf-line)}
+.cc-irow.cc-sel{border-color:#2962ff}
+.cc-iname{border:0;background:none;color:inherit;font:inherit;font-weight:700;padding:0;cursor:pointer}
+.cc-iname span{color:var(--pf-muted);font-weight:400}
+.cc-ivals{display:flex;flex-wrap:wrap;gap:0 7px;font-variant-numeric:tabular-nums;font-weight:700}
+.cc-ivals:empty{display:none}
+.cc-ibtns{display:none;gap:1px}
+.cc-irow:hover .cc-ibtns,.cc-irow.cc-sel .cc-ibtns{display:flex}
+.cc-ibtns button{display:grid;place-items:center;width:26px;height:24px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--pf-ink);cursor:pointer}
+.cc-ibtns button:hover{background:var(--pf-line)}
+.cc-ibtns svg{width:17px;height:17px}
+.cc-irow.cc-off .cc-iname{opacity:.45}
+/* نافذة إعدادات المؤشر: مدخلات، نمط، الظهور */
+.cc-dlg{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.45)}
+.cc-dlg[hidden]{display:none}
+.cc-dlg-box{width:min(440px,100%);max-height:min(660px,calc(100dvh - 32px));display:flex;flex-direction:column;background:var(--pf-bg);color:var(--pf-ink);border:1px solid var(--pf-line);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.45);overflow:hidden}
+.cc-dlg-head{display:flex;align-items:center;gap:10px;padding:14px 18px 4px}
+.cc-dlg-head b{font-size:19px}
+.cc-dlg-head small{color:var(--pf-muted);font-size:11.5px}
+.cc-dlg-head button{margin-inline-start:auto;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--pf-ink);font-size:18px;cursor:pointer}
+.cc-dlg-head button:hover{background:var(--pf-line)}
+.cc-dlg-tabs{display:flex;gap:20px;padding:0 18px;border-bottom:1px solid var(--pf-line)}
+.cc-dlg-tabs button{padding:10px 0 9px;border:0;border-bottom:2px solid transparent;background:none;color:var(--pf-muted);font:inherit;font-weight:700;font-size:13.5px;cursor:pointer}
+.cc-dlg-tabs [aria-selected="true"]{color:var(--pf-ink);border-bottom-color:var(--pf-ink)}
+.cc-dlg-body{flex:1 1 auto;overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.cc-dlg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px}
+.cc-dlg-body input[type=number],.cc-dlg-body select{box-sizing:border-box;width:160px;min-height:36px;padding:4px 10px;border:1px solid var(--pf-line);border-radius:7px;background:var(--pf-bg2);color:var(--pf-ink);font:inherit;font-size:13px}
+.cc-dlg-body input[type=number]{text-align:left;font-variant-numeric:tabular-nums}
+.cc-dlg-plot{display:flex;align-items:center;gap:10px;font-size:13px}
+.cc-dlg-plot>.cc-dlg-check,.cc-dlg-plot>span{flex:1}
+.cc-dlg-plot select{width:80px}
+.cc-dlg-plot input[type=color]{width:44px;height:34px;padding:3px;border:1px solid var(--pf-line);border-radius:7px;background:var(--pf-bg2);cursor:pointer}
+.cc-dlg-sub{padding-inline-start:26px;font-size:12.5px}
+.cc-dlg-sub small{color:var(--pf-muted);font-size:11px}
+.cc-dlg-check{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer}
+.cc-dlg-check input{width:17px;height:17px;margin:0;accent-color:var(--pf-gold)}
+.cc-dlg h4{margin:8px 0 0;font-size:11px;color:var(--pf-muted);font-weight:700}
+.cc-dlg-note{margin:0;font-size:12px;color:var(--pf-muted)}
+.cc-dlg-foot{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--pf-line)}
+.cc-dlg-foot button{min-height:38px;padding:0 18px;border:1px solid var(--pf-line);border-radius:8px;background:transparent;color:var(--pf-ink);font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.cc-dlg-foot [data-dreset]{margin-inline-end:auto;color:var(--pf-muted);font-weight:600;padding:0 12px}
+.cc-dlg-foot .cc-dlg-ok{background:var(--pf-ink);color:var(--pf-bg);border-color:var(--pf-ink)}
+@media (max-width:520px){
+  .cc-dlg{place-items:end center;padding:0}
+  .cc-dlg-box{width:100%;max-height:88dvh;border-radius:14px 14px 0 0}
+  .cc-dlg-body input[type=number],.cc-dlg-body select{width:130px}
+}
+
+/* الشريط العائم فوق الرسم المحدد، ونافذة إعدادات الرسم */
+.cc-ftb{position:absolute;z-index:6;display:flex;align-items:center;gap:4px;padding:4px 6px;background:var(--pf-bg);border:1px solid var(--pf-line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);direction:ltr;white-space:nowrap}
+.cc-ftb[hidden],.cc-ftb [hidden]{display:none}
+.cc-ftb input[type=color]{width:26px;height:24px;padding:2px;border:1px solid var(--pf-line);border-radius:5px;background:var(--pf-bg2);cursor:pointer}
+.cc-ftb select{height:26px;padding:0 4px;border:1px solid var(--pf-line);border-radius:5px;background:var(--pf-bg2);color:var(--pf-ink);font:inherit;font-size:11.5px}
+.cc-ftb button{display:grid;place-items:center;width:28px;height:26px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--pf-ink);cursor:pointer}
+.cc-ftb button:hover{background:var(--pf-line)}
+.cc-ftb button[aria-pressed="true"]{color:var(--pf-gold)}
+.cc-ftb button[data-ftb="delete"]{color:var(--cq-down)}
+.cc-ftb svg{width:17px;height:17px}
+.cc-ftb-sep{width:1px;height:18px;margin:0 2px;background:var(--pf-line)}
+.cc-flyout button[disabled]{opacity:.4;cursor:default;background:transparent}
+.cc-dlg-row input[type=color]{width:44px;height:34px;padding:3px;border:1px solid var(--pf-line);border-radius:7px;background:var(--pf-bg2);cursor:pointer}
+.cc-dlg-body input[type=text]{box-sizing:border-box;width:200px;min-height:36px;padding:4px 10px;border:1px solid var(--pf-line);border-radius:7px;background:var(--pf-bg2);color:var(--pf-ink);font:inherit}
+.cc-dd-pt{display:inline-flex;align-items:center;gap:8px}
+.cc-dd-pt input{width:110px}
+.cc-dlg-link{align-self:flex-start;min-height:36px;padding:0 14px;border:1px solid var(--pf-line);border-radius:8px;background:transparent;color:var(--pf-ink);font:inherit;font-weight:700;cursor:pointer}
+.cc-dlg-link:hover{border-color:var(--pf-gold);color:var(--pf-gold)}
+
+/* شكل الإطار على نمط TradingView: شريط سفلي لمدة العرض، وأزرار علوية وجانبية بنفس الأسلوب */
+.cc-bottom{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:4px;padding:6px 6px;border-top:1px solid var(--pf-line);background:var(--pf-bg)}
+.cc-bottom button{padding:5px 10px;border:0;border-radius:6px;background:transparent;color:var(--pf-muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.cc-bottom button:hover{background:var(--pf-line);color:var(--pf-ink)}
+.cc-bottom button[aria-pressed="true"]{color:var(--pf-gold);background:var(--pf-gold-soft)}
+.cc-bottom{justify-content:flex-start}
+.cc-side hr{width:28px;margin:4px 0}
+
+/* إطار الشارت كما في TradingView: شريط علوي بفواصل عمودية، وعمود أدوات جانبي بخطوط فاصلة، وشريط سفلي لمدة العرض */
+.cq-chart-panel .cc-toolbar{gap:6px 8px;padding:6px 8px;border-bottom:1px solid var(--pf-line);background:var(--pf-bg)}
+.cq-chart-panel .cc-groups{gap:0 6px}
+.cq-chart-panel .cc-groups > .cq-range{position:relative;border:0;gap:0;padding:0 2px}
+.cq-chart-panel .cc-groups > .cq-range + .cq-range::before{content:"";position:absolute;inset-inline-start:-4px;top:4px;bottom:4px;width:1px;background:var(--pf-line)}
+.cq-chart-panel .cc-groups > .cq-range button{padding:5px 9px;border-radius:5px;font-size:12px}
+.cq-chart-panel .cc-groups > .cq-range button:hover{background:var(--pf-line)}
+.cq-chart-panel .cc-search-btn{height:30px;border-radius:5px}
+.cq-chart-panel .cc-full-btn{border:0;border-radius:5px;padding:5px 8px}
+.cq-chart-panel .cc-body{padding-inline-start:46px;margin-top:0;border-bottom:1px solid var(--pf-line)}
+.cq-chart-panel .cc-side{width:44px;padding:6px 0;gap:2px;background:var(--pf-bg);border-inline-end:1px solid var(--pf-line)}
+.cq-chart-panel .cc-side button{width:34px;height:34px;border-radius:6px}
+.cq-chart-panel .cc-side button svg{width:20px;height:20px}
+.cq-chart-panel .cc-side hr{width:26px;margin:5px 0;border-top:1px solid var(--pf-line)}
+.cq-chart-panel .cc-tip{left:50px}
+.cq-chart-panel .cc-flyout{left:50px}
+.cq-chart-panel .cc-bottom{height:36px;padding:0 6px;margin-top:0;border-top:1px solid var(--pf-line);background:var(--pf-bg);align-items:center}
+.cq-chart-panel .cc-bottom button{height:26px;padding:0 9px;border-radius:5px}
+
+/* الشريط العلوي كما في TradingView: أيقونات نوع الشارت في صندوق مرفوع عند الاختيار، والفترات نصًا بخلفية للمختار */
+.cq-chart-panel .cc-typegroup{gap:2px}
+.cq-chart-panel .cc-typegroup button{display:grid;place-items:center;width:34px;height:32px;padding:0;color:var(--pf-muted)}
+.cq-chart-panel .cc-typegroup button svg{width:20px;height:20px}
+.cq-chart-panel .cc-typegroup button[aria-pressed="true"]{background:var(--pf-line);color:var(--pf-ink)}
+.cq-chart-panel .cc-typegroup button:hover{color:var(--pf-ink)}
+.cq-chart-panel .cc-groups > .cq-range button[data-interval][aria-pressed="true"],.cq-chart-panel .cc-groups > .cq-range button[data-crange][aria-pressed="true"]{background:var(--pf-line);color:var(--pf-ink);border-radius:6px}
+
+/* رأس الشارت في أعلى اليسار: شعار الشركة ورمزها ونوع الفاصل */
+.cc-head{display:flex;align-items:center;gap:8px;margin:8px 0 0;font-size:14px;color:var(--pf-ink)}
+.cc-head-logo{width:24px;height:24px;object-fit:contain;border-radius:50%;background:var(--pf-line)}
+.cc-head-sym{font-weight:800;font-variant-numeric:tabular-nums}
+.cc-head-int{color:var(--pf-muted);font-size:12px;font-weight:700;padding:1px 7px;border:1px solid var(--pf-line);border-radius:4px}
+/* سطر الأسعار (التاريخ والافتتاح والأعلى والأدنى والإغلاق) مباشرة تحت الإطار */
+.cq-chart-panel .cc-main > .cc-legend{margin:0;padding:6px 8px 0;min-height:0;margin-inline-start:76px;margin-inline-end:0}
+.cq-chart-panel .cc-main > .cc-head{padding:0 8px;margin-top:4px}
+
+/* مطابقة إطار TradingView: عمود أدوات بعرض 52px وأيقونات 28px، وفواصل رفيعة، وشريط سفلي بارتفاع 38px وساعته على الطرف المقابل */
+.cq-chart-panel .cc-body,.ta-chart .cc-body{padding-inline-start:52px;padding-left:52px}
+.cq-chart-panel .cc-side{width:52px;padding:8px 0;gap:0}
+.cq-chart-panel .cc-side button{width:40px;height:40px;border-radius:6px}
+.cq-chart-panel .cc-side button svg{width:28px;height:28px}
+.cq-chart-panel .cc-side hr{width:36px;margin:6px 0}
+.cq-chart-panel .cc-side [data-menu]::after{right:5px;bottom:5px}
+.cq-chart-panel .cc-tip,.cq-chart-panel .cc-flyout{left:58px}
+.cq-chart-panel .cc-ibtns svg,.cq-chart-panel .cc-ftb svg{width:20px;height:20px}
+.cq-chart-panel .cc-typegroup button{width:40px;height:36px}
+.cq-chart-panel .cc-typegroup button svg{width:28px;height:28px}
+.cq-chart-panel .cc-bottom{height:38px}
+.cq-chart-panel .cc-bottom button{height:28px;padding:0 10px}
+.cc-clock{margin-inline-start:auto;padding:0 10px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--pf-muted);white-space:nowrap}
+.cq-chart-panel .cc-side button{height:34px}
+.cq-chart-panel .cc-side hr{margin:4px 0}
+.ta-page .cc-chart{--cc-base:max(690px,calc(100vh - 280px))}
+
+/* شريط الأدوات الجانبي كما في TradingView: مجموعات بزر لآخر أداة وسهم صغير يفتح قائمة جانبية بأقسام وأسماء واختصارات ونجوم */
+.cc-grp{position:relative;flex:none;display:flex;justify-content:center;width:100%}
+.cc-side .cc-grp-arrow{position:absolute;right:0;top:50%;transform:translateY(-50%);width:13px;height:26px;border-radius:5px 0 0 5px;background:var(--pf-line);color:var(--pf-muted);opacity:0;transition:opacity .12s}
+.cq-chart-panel .cc-side .cc-grp-arrow{width:13px;height:26px}
+.cc-side .cc-grp-arrow::after{content:none}
+.cc-side .cc-grp-arrow svg{width:8px;height:12px}
+.cc-grp:hover .cc-grp-arrow,.cc-grp:focus-within .cc-grp-arrow,.cc-grp[data-active] .cc-grp-arrow,.cc-side .cc-grp-arrow[aria-expanded="true"]{opacity:1}
+.cc-side .cc-grp-arrow:hover{background:var(--pf-gold-soft);color:var(--pf-gold)}
+@media(hover:none){.cc-side .cc-grp-arrow{opacity:.6}}
+.cc-side [data-favbar]{margin-top:auto;flex:none;background:var(--pf-ink);color:var(--pf-bg)}
+.cc-side [data-favbar]:hover{background:var(--pf-ink);opacity:.85}
+.cc-side [data-favbar][aria-pressed="true"]{background:var(--pf-gold);color:var(--pf-bg)}
+.cc-flyout[data-kind^="grp:"]{width:300px;padding:6px 0;overflow-y:auto;border-radius:10px}
+.cc-flyout .cc-fl-title{padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--pf-muted)}
+.cc-flyout[data-kind^="grp:"] hr{margin:6px 0;border:0;border-top:1px solid var(--pf-line)}
+.cc-flyout .cc-row{display:flex;align-items:center}
+.cc-flyout .cc-row button{background:transparent;color:inherit}
+.cc-flyout .cc-row>button:first-child{flex:1;min-width:0;gap:12px;height:38px;padding:0 16px;border-radius:0;font-size:13.5px;font-weight:600}
+.cc-flyout .cc-row button::after{content:none}
+.cc-flyout .cc-ri{display:grid;place-items:center;flex:none;width:28px;height:28px}
+.cc-flyout .cc-ri svg{width:28px;height:28px}
+.cc-flyout .cc-rn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-flyout .cc-row kbd{flex:none;font:inherit;font-size:12px;font-weight:600;letter-spacing:.4px;color:var(--pf-muted)}
+.cc-flyout .cc-row>button[aria-pressed="true"]:first-child{color:var(--pf-gold)}
+.cc-flyout .cc-star{flex:none;display:grid;place-items:center;width:40px;height:38px;padding:0;margin:0;opacity:0;color:inherit}
+.cc-flyout .cc-star svg{fill:none}
+.cc-flyout .cc-star[aria-pressed="true"]{opacity:1}
+.cc-flyout .cc-star[aria-pressed="true"] svg{fill:currentColor}
+.cc-flyout .cc-row:hover,.cc-flyout .cc-row:focus-within{background:var(--pf-ink);color:var(--pf-bg)}
+.cc-flyout .cc-row:hover>button:first-child,.cc-flyout .cc-row:focus-within>button:first-child{color:var(--pf-bg)}
+.cc-flyout .cc-row:hover kbd{color:inherit;opacity:.65}
+.cc-flyout .cc-row:hover .cc-star,.cc-flyout .cc-row:focus-within .cc-star{opacity:1}
+.cc-flyout .cc-row .cc-star:hover svg{fill:currentColor}
+.cc-favbar{position:absolute;top:8px;left:50%;z-index:25;transform:translateX(-50%);display:flex;gap:2px;padding:4px;border:1px solid var(--pf-line);border-radius:10px;background:var(--pf-bg);box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.cc-favbar[hidden]{display:none}
+.cc-favbar button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--pf-ink);cursor:pointer}
+.cc-favbar button:hover{background:var(--pf-line)}
+.cc-favbar button[aria-pressed="true"]{background:var(--pf-gold-soft);color:var(--pf-gold)}
+.cc-favbar svg{width:26px;height:26px}
+
+/* توحيد أبعاد الشريط الجانبي على مقاسات TradingView: عمود 52px، أزرار 40×38 بأيقونة 28px، وفواصل بين المجموعات، وحالة نشطة بصندوق مدوّر (الألوان من ألوان الموقع) */
+.cq-chart-panel .cc-side{width:52px;padding:6px 0;gap:1px}
+.cq-chart-panel .cc-side button{width:40px;height:38px;border-radius:6px;transition:background .12s,color .12s}
+.cq-chart-panel .cc-side button svg{display:block;width:28px;height:28px}
+.cq-chart-panel .cc-side button:not([aria-pressed="true"]):not([aria-expanded="true"]){color:var(--pf-ink)}
+.cq-chart-panel .cc-side button:hover:not(:disabled){background:var(--pf-line)}
+.cq-chart-panel .cc-side button[aria-pressed="true"],.cq-chart-panel .cc-side button[aria-expanded="true"]{background:var(--pf-gold-soft);color:var(--pf-gold)}
+.cq-chart-panel .cc-side button:focus-visible{outline:2px solid var(--pf-gold);outline-offset:-2px}
+.cq-chart-panel .cc-side hr{width:34px;margin:5px 0;border-top:1px solid var(--pf-line)}
+.cq-chart-panel .cc-side [data-menu]:not(.cc-grp-arrow)::after{right:4px;bottom:4px;border-width:2.5px;opacity:.5}
+.cq-chart-panel .cc-side .cc-grp-arrow{right:0;width:12px;height:24px;border-radius:5px 0 0 5px}
+
+/* قائمة «⋯» في الشريط العائم كما في TradingView: أيقونة يمينًا، والاسم، ثم السهم أو الاختصار في الطرف المقابل */
+.cc-ftb button[data-ftb="more"]{width:36px}
+.cc-ftb button[data-ftb="more"][aria-expanded="true"]{background:var(--pf-line)}
+.cc-more{position:absolute;z-index:7;width:236px;padding:6px 0;background:var(--pf-bg);border:1px solid var(--pf-line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.4);font-size:13.5px;direction:rtl}
+.cc-more[hidden]{display:none}
+.cc-more hr{margin:6px 0;border:0;border-top:1px solid var(--pf-line)}
+.cc-mi{display:flex;align-items:center;gap:10px;width:100%;height:40px;padding:0 14px;border:0;background:transparent;color:var(--pf-ink);font:inherit;font-weight:600;text-align:start;cursor:pointer}
+.cc-mi:hover:not([disabled]),.cc-mi-wrap:hover>.cc-mi,.cc-mi-wrap[data-open]>.cc-mi{background:var(--pf-line)}
+.cc-mi[disabled]{opacity:.4;cursor:default}
+.cc-mi-i{display:grid;place-items:center;flex:none;width:28px;height:28px}
+.cc-mi-i svg{width:28px;height:28px}
+.cc-mi-t{flex:1;min-width:0;white-space:nowrap}
+.cc-mi kbd{flex:none;font:inherit;font-size:12px;font-weight:600;letter-spacing:.3px;color:var(--pf-muted)}
+.cc-mi-arrow{display:grid;place-items:center;flex:none;width:14px;color:var(--pf-muted)}
+.cc-mi-wrap{position:relative}
+.cc-msub{display:none;position:absolute;top:-7px;right:100%;width:210px;padding:6px 0;background:var(--pf-bg);border:1px solid var(--pf-line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.4)}
+.cc-mi-wrap:hover>.cc-msub,.cc-mi-wrap[data-open]>.cc-msub{display:block}
+.cc-more[data-flip="1"] .cc-msub{right:auto;left:100%}
+.cc-chk{display:grid;place-items:center;width:18px;height:18px;border:1.5px solid var(--pf-muted);border-radius:4px;font-style:normal}
+.cc-mi[aria-pressed="true"] .cc-chk{border-color:var(--pf-gold);background:var(--pf-gold)}
+.cc-mi[aria-pressed="true"] .cc-chk::after{content:"✓";color:var(--pf-bg);font-size:12px;font-weight:800;line-height:1}

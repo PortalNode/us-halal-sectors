@@ -1,0 +1,42 @@
+name: تحديث البيانات
+
+# الأسعار والمؤشرات: كل 15 دقيقة أثناء الجلسة الأمريكية وبعدها بساعتين (بتوقيت UTC، أيام الاثنين–الجمعة).
+# الشموع اليومية: مرة بعد الإغلاق. يمكن تشغيله يدويًا أيضًا.
+on:
+  schedule:
+    - cron: '*/15 13-23 * * 1-5'
+    - cron: '45 22 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      ohlc:
+        description: 'حدّث الشموع اليومية أيضًا'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: بيانات الأسعار والقائمة الشرعية
+        run: python3 scripts/build_data.py
+      - name: الشموع اليومية (بعد الإغلاق فقط أو عند الطلب)
+        if: github.event_name == 'workflow_dispatch' && inputs.ohlc || github.event.schedule == '45 22 * * 1-5'
+        run: python3 scripts/build_ohlc.py
+      - name: حفظ التغييرات
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json financials.json logos ohlc
+          git diff --cached --quiet || git commit -m "تحديث البيانات $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push

@@ -1,0 +1,286 @@
+/* تحسينات الجوال (الآيفون خصوصًا) فقط.
+   كل القواعد داخل استعلامات للجوال (max-width:760px، وهي نقطة الكسر نفسها في styles.css)،
+   فلا تتأثر الشاشات الأعرض (الكمبيوتر والتابلت الأفقي) إطلاقًا. يُحمَّل هذا الملف آخر ملفات CSS. */
+
+/* لا يكبّر الآيفون الخط تلقائيًا عند تدوير الجهاز أفقيًا (لا أثر له على الكمبيوتر) */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+
+/* شاشات اللمس: لا انتظار 300ms ولا تكبير بالنقر المزدوج على الأزرار والروابط */
+@media (pointer:coarse){
+  a,button,select,summary,label,[role="tab"]{touch-action:manipulation}
+}
+
+/* Safari على الآيفون يكبّر الصفحة كلها عند الضغط على أي حقل خطه أصغر من 16px ولا يعيدها.
+   لذلك خط الحقول 16px على الجوال (ويشمل الآيفون في الوضع الأفقي). */
+@media (max-width:760px),(pointer:coarse) and (max-height:500px){
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="hidden"]):not([type="button"]):not([type="submit"]),
+  select,textarea{font-size:16px!important}
+}
+
+@media (max-width:760px){
+
+  /* ---------- الشريط العلوي: أقل ارتفاعًا ليبقى المحتوى ظاهرًا ---------- */
+  /* سطر 1: اسم الموقع + المظهر، سطر 2: الصفحات، سطر 3: القطاع والشركة جنبًا إلى جنب */
+  .site-bar{gap:2px 8px;padding:8px 10px}
+  .site-bar .site-name{order:1;flex:1 1 auto;min-width:0;font-size:18px}
+  .site-bar .theme-switch{order:2;margin-inline-start:0;padding:2px}
+  .site-bar .theme-switch button{min-width:0;min-height:34px;padding:4px 11px;font-size:12px}
+  .site-bar .hero-date{order:3;flex:1 1 100%;font-size:11px}
+  .site-nav{order:4;flex:1 1 100%;margin-inline-start:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .site-nav::-webkit-scrollbar{display:none}
+  .site-nav a{flex:none;padding:12px 8px}
+  .sector-switch{order:5;flex:1 1 calc(50% - 4px);min-width:0;flex-direction:column;align-items:stretch;gap:3px;margin-top:4px;font-size:11px}
+  .sector-switch select{width:100%;min-width:0;min-height:42px;padding:6px 10px;text-overflow:ellipsis}
+  .company-switch select{min-width:0}
+
+  /* مسار التنقل: منطقة لمس مريحة */
+  .bank-breadcrumb{font-size:11.5px;margin:14px 0 10px}
+  .bank-breadcrumb a{display:inline-block;padding:9px 2px}
+  .bank-back{min-height:38px}
+  .bank-period{font-size:11px}
+
+  /* ---------- جدول الشركات المضغوط ---------- */
+  /* عرض الجدول = الرمز 66 + الاسم 122 + نحو 58px لكل عمود رقمي ظاهر في كل مجموعة */
+  .sections[data-cols="val"] table{min-width:678px}
+  .sections[data-cols="perf"] table{min-width:640px}
+  .sections[data-cols="trade"] table{min-width:560px}
+  .sections col.col-symbol{width:66px}
+  .sections col.col-name{width:122px}
+  /* القيمة السوقية والمتداولة أرقام طويلة (6,471,080.00) فتأخذ عرضًا أكبر */
+  .sections col:is(.col-mcap,.col-tval){width:84px!important}
+  .sections tbody td{padding:5px;font-size:12px;height:38px}
+  .sections thead th,.sections thead .sticky-1,.sections thead .sticky-2{padding:0 6px;font-size:11px}
+  /* زر الفرز يملأ خلية العنوان كلها فيسهل لمسه */
+  .sections thead th button{display:flex;align-items:center;justify-content:inherit;gap:2px;width:100%;min-height:36px;font-size:11px;line-height:1.25;text-align:inherit}
+  /* عمودا الرمز والاسم الثابتان أضيق */
+  .sections .sticky-1{width:66px;min-width:66px;max-width:66px}
+  .sections .sticky-2,.sections .table-wrap thead th.sticky-2{right:66px;width:122px;min-width:122px;max-width:122px}
+  .sections .symbol-cell{gap:2px}
+  .sections .symbol-badge{font-size:12px}
+  /* نجمة المفضلة: الشكل نفسه ومنطقة لمس أكبر */
+  .sections .fav-toggle{width:26px;height:32px;margin:-7px -4px -7px 0;font-size:15px}
+  /* اسم الشركة يلتف لسطرين بدل القص */
+  .sections .company-name{font-size:12px}
+  .sections td.company-name.has-co-logo{white-space:nowrap}
+  .sections td.company-name.has-co-logo .company-results-link{white-space:normal;line-height:1.25;max-width:calc(100% - 26px);overflow:visible}
+  .sections .co-logo-sm{width:20px;height:20px;margin-inline-end:6px}
+
+  /* أزرار مجموعات الأعمدة ونوع الربحية ودليل القراءة */
+  .col-switch button,.eps-switch button{min-height:38px}
+  .read-guide summary{padding:10px 0}
+  /* أزرار اختيار القطاع بمنطقة لمس مريحة */
+  .group-button,.workspace .sector-nav .sector-button{min-height:38px}
+
+  /* ---------- الجدول السنوي: بلا تمرير عمودي داخلي، فيتحرك الإصبع مع الصفحة ---------- */
+  .annual-table-wrap{max-height:none}
+  /* بعد دمج نسبة التغير تحت القيمة (mobile-tables.js): عمود بند أضيق وأعمدة قيم مضغوطة */
+  .banks-page .annual-table.m-merged .annual-col-label{width:112px}
+  .banks-page .annual-table.m-merged .annual-col-value{width:88px}
+  .banks-page .annual-table.m-merged .annual-label{padding:8px;font-size:11.5px;line-height:1.5}
+  .banks-page .annual-table.m-merged tbody td{height:auto;padding:7px 4px;line-height:1.35}
+  .banks-page .annual-table.m-merged .m-change{display:block;margin-top:2px;font-size:10.5px;font-weight:600}
+  .banks-page .annual-table.m-merged .m-change .num{font-size:10.5px}
+  .banks-page .annual-table.m-merged .m-none{visibility:hidden}
+  /* الترويسة تتبع الشاشة أثناء النزول (الإزاحة من mobile-tables.js) */
+  .banks-page .annual-table.m-merged thead{position:relative;z-index:30;transform:translateY(var(--table-head-offset,0px))}
+  .m-legend{margin:8px 0 4px;font-size:11px;color:var(--muted)}
+
+  /* ---------- بطاقات الفترات (mobile-tables.js): بطاقة لكل فترة تُسحب أفقيًا، الأحدث أولًا ---------- */
+  .m-view{margin:10px 0 8px}
+  .m-view .m-legend{margin:0 0 8px}
+  .m-switch{display:inline-flex;margin-bottom:10px;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .m-switch button{min-height:38px;padding:0 18px;border:0;border-inline-start:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px;font-weight:700}
+  .m-switch button:first-child{border-inline-start:0}
+  .m-switch button[aria-pressed="true"]{background:var(--teal);color:var(--on-accent)}
+  .m-view[data-view="table"] .q-tabs,.m-view[data-view="table"] .q-cards{display:none}
+  .annual-table-wrap[data-view="cards"]{display:none}
+  /* أزرار القفز بين الفترات */
+  .q-tabs{display:flex;gap:6px;margin-bottom:8px;padding:2px 0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .q-tabs::-webkit-scrollbar{display:none}
+  .q-tab{flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:18px;background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;white-space:nowrap}
+  .q-tab .period-sub{display:none}
+  .q-tab[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:var(--on-accent)}
+  /* البطاقات: كل بطاقة 88% من العرض فتظهر حافة التالية */
+  .q-cards{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;padding-bottom:2px}
+  .q-cards::-webkit-scrollbar{display:none}
+  .q-card{flex:0 0 88%;min-width:0;scroll-snap-align:start;background:var(--panel);border:1px solid var(--line)}
+  .q-card>header{display:flex;align-items:baseline;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:17px;font-weight:800;color:var(--teal)}
+  .q-card>header .period-sub{display:inline;font-size:11px;font-weight:400;color:var(--muted)}
+  .q-card dl{margin:0}
+  .q-card h4{margin:0;padding:8px 14px;background:var(--head);color:var(--teal);font-size:12px;font-weight:700}
+  .q-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+  .q-card h4+.q-row{border-top:0}
+  .q-row dt{flex:1;min-width:0;margin:0;font-size:12px;font-weight:600;line-height:1.5;color:var(--ink)}
+  .q-row dt small{display:block;margin-top:2px;font-size:10.5px;font-weight:400;color:var(--muted)}
+  .q-row dd{flex:none;margin:0;text-align:left;direction:ltr;unicode-bidi:isolate}
+  .q-val{display:block;font-size:15px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  .q-val .num{font-size:inherit}
+  .q-chg{display:block;margin-top:1px;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+  .q-chg .num{font-size:inherit}
+  /* أرقام «آخر النتائج»: اسم البند يلتف بدل القص، والبطاقة الأخيرة الفردية بعرض الصف كله */
+  .key-figure dt{white-space:normal;overflow:visible;line-height:1.4}
+  .key-figure:last-child:nth-child(odd){grid-column:1/-1}
+  .period-seg button,.period-seg.small button{min-height:40px}
+
+  /* ---------- شارت السهم الكامل (التحليل الفني) ----------
+     أدوات الرسم شريط أفقي قابل للتمرير فوق الشارت ليأخذ الشارت العرض كاملًا بدل عمود جانبي بعرض 52px.
+     القواعد الأصلية في company-quote.css بخصوصية .cq-chart-panel، لذلك نكررها هنا بالخصوصية نفسها. */
+  .cq-chart-panel .cc-body,.ta-chart .cc-body,.ta-page .ta-chart .cc-body{padding-inline-start:0;padding-left:0}
+  .cq-chart-panel .cc-side{position:static;width:auto;flex-direction:row;align-items:center;gap:0;padding:4px 6px;overflow-x:auto;overflow-y:hidden;border-inline-end:0;border-right:0;border-bottom:1px solid var(--pf-line);-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .cq-chart-panel .cc-side button{flex:none;width:40px;height:40px}
+  .cq-chart-panel .cc-side .cc-grp{flex:none;width:auto}
+  .cq-chart-panel .cc-side hr{flex:none;width:0;height:22px;margin:0 5px;border-top:0;border-left:1px solid var(--pf-line)}
+  .cq-chart-panel .cc-side [data-favbar]{margin-top:0}
+  /* سهم القائمة الجانبية لكل مجموعة: منطقة لمس أكبر وخلفية شفافة فلا يثقل الشريط */
+  .cq-chart-panel .cc-side .cc-grp-arrow{width:16px;height:34px;opacity:.75;background:transparent;border-radius:6px}
+  .cq-chart-panel .cc-side .cc-grp{margin-inline-end:2px}
+  /* القوائم تحت الشريط (السكربت يضع top بالسطر، فنتجاوزه هنا) وتتسع للشاشة */
+  .cq-chart-panel .cc-flyout{top:52px!important;left:8px!important;max-width:calc(100vw - 48px);max-height:min(60vh,420px)!important;overflow-y:auto}
+  .cq-chart-panel .cc-flyout[data-kind^="grp:"]{width:min(300px,calc(100vw - 48px))}
+  .cq-chart-panel .cc-favbar{top:56px}
+  .cc-tip{display:none!important}
+  /* سطر الأسعار بلا الإزاحة التي كانت تفسح مكانًا للعمود الجانبي */
+  .cq-chart-panel .cc-main>.cc-legend{margin-inline-start:0}
+  /* ارتفاع الشارت يناسب شاشة الجوال بدل 690px */
+  .ta-page .cc-chart{--cc-base:clamp(380px,calc(100vh - 340px),560px)}
+  .cc-chart{--cc-base:300px}
+  /* أزرار الشريط العلوي والسفلي بحجم يناسب الإصبع */
+  .cq-chart-panel .cc-search-btn{height:42px}
+  .cq-chart-panel .cc-groups>.cq-range:not(.cc-typegroup) button{padding:10px 11px}
+  .cq-chart-panel .cc-typegroup button{width:44px;height:40px}
+  .cq-chart-panel .cc-full-btn{padding:9px 11px}
+  .cq-chart-panel .cc-bottom{height:auto;min-height:44px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .cq-chart-panel .cc-bottom::-webkit-scrollbar{display:none}
+  .cq-chart-panel .cc-bottom button{flex:none;height:34px;padding:0 9px}
+  /* ساعة التوقيت لا تتسع مع كل أزرار المدة على عرض الجوال فكانت تُقص من الطرف */
+  .cc-clock{display:none}
+  /* الفواصل العمودية بين مجموعات الشريط العلوي تظهر شاذة عندما تلتف المجموعات على سطرين */
+  .cq-chart-panel .cc-groups>.cq-range+.cq-range::before{display:none}
+  /* السحب على الشارت للرسم أو التحريك لا يحدد النصوص ولا يفتح قائمة النسخ في iOS */
+  .cq-chart-panel .cc-body,.cq-chart-panel .cc-toolbar,.cq-chart-panel .cc-bottom{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .cc-search-list li{padding:10px 8px}
+  .cc-ibtns button{width:32px;height:30px}
+  .cc-irow{min-height:30px}
+  .cc-iname{padding:6px 2px}
+  .cc-ftb button{width:34px;height:32px}
+  .cc-ftb select{height:32px}
+  /* ملء الشاشة: هوامش أقل ليأخذ الشارت أكبر مساحة، وشريط الأدوات لا ينكمش */
+  .cq-chart-panel.cc-full{padding:8px 8px max(8px,env(safe-area-inset-bottom))}
+  .cq-chart-panel.cc-full .cc-side{flex:none}
+
+  /* ---------- ماسح السوق وقائمة المراقبة ---------- */
+  /* بلا تمرير عمودي داخلي (فخ تمرير على الآيفون): الجدول يتمرر أفقيًا فقط والصفحة عموديًا */
+  .ta-page .sc-wrap{max-height:none}
+  .ta-page .sc-tabs button{padding:13px 14px}
+  .ta-page .sc-filters select,.ta-page .sc-filters input{height:42px}
+  .ta-page .sc-reset,.ta-page .sc-btn{height:42px}
+  .ta-page .sc-open{height:36px;padding:0 12px}
+  .ta-page .sc-chip{height:32px;padding:0 11px}
+
+  /* ---------- صفحة المقارنة ---------- */
+  .cx-seg button{padding:10px 12px}
+  .cx-chip{min-height:38px}
+  .cx-ghost{min-height:40px}
+  .cx-quick button{padding:10px 8px}
+  .cx-search{min-height:40px}
+  .cx-select select{min-height:42px}
+  .cx-legend button{padding:8px 8px}
+  .cx-table thead button{min-height:38px}
+
+  /* ---------- خطوط صغيرة جدًا ---------- */
+  .market-group-label,.financial-status,.sector-performance,.source-tag,.count{font-size:11px}
+  .cp-tag,.cp-label,.cq-label,.cq-source,.cq-mini-when,.cp-legend span{font-size:11px}
+  .annual-table .annual-label small{font-size:10.5px}
+  .bank-charts-heading p,.bank-chart-selection-status,.bank-chart-unit{font-size:11px}
+  .cq-mini-yaxis,.cq-mini-xaxis{font-size:10px}
+}
+
+/* الآيفون في الوضع الأفقي (نحو 734×343): الشريط العلوي في سطر واحد بدل ثلاثة، وارتفاع الشارت بقدر الشاشة.
+   عرضه أقل من 760px فيأخذ تخطيط الجوال، لذلك نوفّر الارتفاع. */
+@media (max-width:760px) and (orientation:landscape) and (max-height:500px){
+  .site-bar{padding:6px 10px;gap:0 10px}
+  .site-bar .site-name{order:1;flex:none;font-size:17px}
+  .site-nav{order:2;flex:1 1 0;min-width:0}
+  .site-nav a{padding:10px 8px}
+  .site-bar .theme-switch{order:3}
+  .site-bar .hero-date{order:4}
+  .sector-switch{order:5;flex-basis:calc(50% - 6px)}
+  .ta-page .cc-chart,.cc-chart{--cc-base:clamp(240px,calc(100vh - 110px),420px)}
+}
+
+/* الرئيسية: شاشة أولى مختصرة ليظهر الجدول أبكر (نقطة الكسر نفسها في layout.css). الجدول كان يبدأ عند 902px ويبدأ الآن عند نحو 664px */
+@media (max-width:560px){
+  /* ملخص السوق: المؤشر واتساع السوق جنبًا إلى جنب، ثم القيمة المتداولة، ثم الأداء */
+  .market-summary{margin:8px 0;padding:8px 10px}
+  .market-summary h2{margin:0 0 6px;font-size:13px}
+  .market-summary .market-stats{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:8px;column-gap:0}
+  .market-summary .market-group{padding:0 8px;border-inline-start:0;border-top:0}
+  .market-summary .market-group+.market-group{border-top:0;padding-top:0}
+  .market-summary .market-group-index{grid-column:1;padding-inline-start:0}
+  .market-summary .market-group-breadth{grid-column:2;border-inline-start:1px solid var(--line);padding-inline-end:0}
+  .market-summary .market-group-turnover,.market-summary .market-group-performance{grid-column:1/-1;padding:8px 0 0;border-top:1px solid var(--line)}
+  .market-group-index{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"logo label" "logo cards";align-items:center;column-gap:8px;text-align:start}
+  .market-group-index .market-group-logo{grid-area:logo;width:32px;height:32px;margin:0}
+  .market-group-index .market-group-label{grid-area:label;margin:0 0 2px;text-align:start}
+  .market-group-index .market-group-cards{grid-area:cards;justify-content:start;grid-auto-flow:row;gap:2px}
+  .market-summary .market-group-turnover{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .market-group-turnover .market-group-label{margin:0}
+  .market-group-turnover .market-group-cards{display:block}
+  .market-summary .market-group-index .market-card>span{display:none}
+  .market-summary .market-group-index .market-card:first-child strong{font-size:17px}
+  .market-group-label{margin-bottom:4px}
+  /* تسميات اتساع السوق تلتف على سطرين بدل القص في العمود الأضيق */
+  .market-summary .market-group-breadth .market-card>span{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;font-size:10px}
+
+  /* شاشات أضيق من 360px (iPhone SE): نسبة التغير اليومي لا تتسع بالخط الأصلي في نصف العرض */
+  @media (max-width:360px){
+    .market-summary .market-group-index .market-card:last-child strong{font-size:13px}
+    .market-summary .market-group-index .market-card:first-child strong{font-size:15px}
+  }
+
+  /* عنوان القائمة والعدد في سطر واحد */
+  .toolbar-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:0 10px}
+  .toolbar-heading h2{margin:0;font-size:20px}
+  .toolbar-heading p{margin:0}
+
+  /* منتقي القطاعات: صفّ مجموعات واحد قابل للتمرير بدل ثلاثة صفوف، وصفّ القطاعات الفرعية كذلك */
+  .workspace .sector-nav{padding:8px;margin:8px 0}
+  .sector-groups,.sector-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .sector-groups::-webkit-scrollbar,.sector-chips::-webkit-scrollbar{display:none}
+  .sector-groups>*,.sector-chips>*{flex:none}
+  .sector-chips{margin-top:8px;padding-top:8px}
+
+  /* أدوات الجدول أقل ارتفاعًا */
+  .table-tools{gap:4px 10px;margin-bottom:6px}
+  .col-switch button,.eps-switch button{min-height:36px}
+}
+
+/* الشارت المصغّر في صفحات الشركات (نقطة الكسر نفسها في company-quote.css).
+   كان ارتفاع الحاوية ثابتًا 240px من قاعدة الكمبيوتر بينما محتواها أطول، فيتجاوز الرسم حاويته
+   ويتداخل مع ما تحته؛ الآن ارتفاعها تلقائي والشارت يملأ العرض. */
+@media (max-width:720px){
+  .cq-mini-slot{height:auto}
+  .cq-mini{width:100%}
+  .cq-mini-ranges{flex-wrap:nowrap;gap:3px}
+  .cq-mini-ranges button{flex:1 1 auto;padding:9px 2px;font-size:11px;white-space:nowrap}
+  .cq-mini-ohlc{font-size:11px}
+  .cq-range button{padding:9px 12px}
+}
+
+/* حركة السوق: على الجوال تبويبات لقائمة واحدة تُظهر 3 صفوف فقط (والباقي بزر «عرض كل العشر») كي لا تطول الشاشة الأولى */
+@media (max-width:560px){
+  .market-movers{margin:8px 0;padding:8px 10px}
+  .market-movers h2{display:none}
+  .mover-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:4px;border:1px solid var(--soft-line)}
+  .mover-tab{min-height:36px;padding:6px 2px;border:0;border-radius:0;background:transparent;color:var(--muted);font:700 11px var(--font)}
+  .mover-tab[aria-selected="true"]{background:#f59e0b;color:var(--on-accent)}
+  .mover-tab:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
+  .mover-grid{display:block}
+  .mover-card,.mover-card:nth-child(n){display:none;padding:0;border:0}
+  .mover-card.is-active{display:block}
+  .mover-title{display:none}
+  .mover-row{padding:7px 2px;grid-template-columns:34px minmax(0,1fr) 42px 74px}
+  .mover-list li:nth-child(n+4){display:none}
+  .market-movers-body.is-expanded .mover-list li:nth-child(n+4){display:block}
+  .mover-more{display:block;width:100%;min-height:34px;margin-top:2px;border:0;border-radius:0;background:transparent;color:var(--teal);font:700 11px var(--font)}
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11161d">
+  <meta name="description" content="النتائج المالية السنوية للشركات الأمريكية الشرعية: الإيرادات والأرباح والتدفقات والهوامش، مع سعر السهم وشارت مصغر.">
+  <title>نتائج الشركات | السوق الأمريكي الشرعي</title>
+  <script src="theme.js?v=1"></script>
+  <link rel="stylesheet" href="styles.css?v=1">
+  <link rel="stylesheet" href="banks.css?v=1">
+  <link rel="stylesheet" href="theme.css?v=1">
+  <link rel="stylesheet" href="company-profile.css?v=1">
+  <link rel="stylesheet" href="company-quote.css?v=1">
+  <link rel="stylesheet" href="layout.css?v=1">
+  <link rel="stylesheet" href="mobile.css?v=1">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+</head>
+<body class="banks-page">
+  <main class="main-content" id="bank-main">
+    <header class="site-bar">
+      <h1 class="site-name"><a href="index.html">السوق الأمريكي الشرعي</a></h1>
+      <nav class="site-nav" aria-label="صفحات الموقع"><a href="index.html">الرئيسية</a><a href="company.html" data-results-link aria-current="page">نتائج الشركات</a><a href="comparison.html">مقارنة النتائج المالية</a><a href="technical-analysis.html">التحليل الفني</a></nav>
+      <div class="theme-switch" role="group" aria-label="اختيار مظهر الموقع"><span class="theme-switch-label">المظهر</span><button type="button" data-theme-option="light" aria-pressed="false">فاتح</button><button type="button" data-theme-option="dark" aria-pressed="true">داكن</button></div>
+    </header>
+    <div class="bank-breadcrumb"><p><a href="index.html">الرئيسية</a><span aria-hidden="true"> / </span><span id="crumb">نتائج الشركات</span></p></div>
+    <p id="bank-load-status" class="financial-status" role="status" aria-live="polite">جار تحميل بيانات الشركات…</p>
+    <section id="bank-panel" class="bank-panel" aria-labelledby="bank-title" hidden>
+      <div class="bank-heading">
+        <div><h2 id="bank-title"></h2></div>
+        <span class="bank-period" id="bank-period-badge"></span>
+      </div>
+      <div id="company-profile" class="company-profile"></div>
+      <p class="key-figures-title" id="kf-title"></p>
+      <dl class="key-figures" id="kf"></dl>
+      <p class="bank-unit-note" id="unit-note"></p>
+      <div id="bank-table-wrap" class="table-wrap annual-table-wrap" tabindex="0" aria-label="جدول النتائج السنوية؛ يمكن تمريره أفقيًا"></div>
+      <section id="bank-charts" class="bank-charts" aria-labelledby="bank-charts-title">
+        <div class="bank-charts-heading"><h3 id="bank-charts-title">المقارنة بالأعمدة</h3><p id="bank-charts-context"></p></div>
+        <div class="bank-chart-control"><label for="bank-chart-metric">البند المراد عرضه</label><select id="bank-chart-metric"></select></div>
+        <div id="bank-charts-grid" class="bank-charts-grid"></div>
+      </section>
+    </section>
+    <noscript><p class="financial-status">يرجى تفعيل JavaScript لعرض بيانات الشركات.</p></noscript>
+  </main>
+  <script src="company.js?v=1" defer></script>
+  <script src="company-chart.js?v=1" defer></script>
+  <script src="company-quote.js?v=1" defer></script>
+  <script src="layout.js?v=1" defer></script>
+</body>
+</html>
