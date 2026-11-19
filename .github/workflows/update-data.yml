@@ -35,10 +35,15 @@ jobs:
       - name: الشموع اليومية (بعد الإغلاق فقط أو عند الطلب)
         if: github.event_name == 'workflow_dispatch' && inputs.ohlc || github.event.schedule == '45 22 * * 1-5'
         run: python3 scripts/build_ohlc.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: مفاتيح جودة السهم (الماسح)
+        run: node scripts/build-scanner.mjs
       - name: حفظ التغييرات
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data.json financials.json company-profiles.json logos ohlc
+          git add data.json financials.json company-profiles.json logos ohlc scanner/signals.json
           git diff --cached --quiet || git commit -m "تحديث البيانات $(date -u +%Y-%m-%dT%H:%MZ)"
           git push

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#11161d">
-  <meta name="description" content="شارت السهم للشركات الأمريكية الشرعية مع المتوسطات المتحركة وبولنجر وRSI وMACD وأدوات الرسم.">
+  <meta name="description" content="مفاتيح جودة السهم (ستة مفاتيح فنية ومالية) للسوق الأمريكي الشرعي مع شارت السهم والمتوسطات المتحركة وبولنجر وRSI وMACD وأدوات الرسم وقائمة مراقبة.">
   <title>التحليل الفني | السوق الأمريكي الشرعي</title>
   <script src="theme.js?v=1"></script>
   <link rel="stylesheet" href="styles.css?v=1">
@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="company-profile.css?v=1">
   <link rel="stylesheet" href="company-quote.css?v=1">
   <link rel="stylesheet" href="technical-analysis.css?v=1">
+  <link rel="stylesheet" href="scanner/scanner.css?v=sc-us-20261119">
   <link rel="stylesheet" href="layout.css?v=1">
   <link rel="stylesheet" href="mobile.css?v=1">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -26,9 +27,17 @@
     </header>
     <div class="ta-heading">
       <h2>التحليل الفني</h2>
-      <p>شارت تفاعلي لأي سهم من القائمة الشرعية: شموع أو خط، يومي وأسبوعي وشهري، المتوسطات المتحركة وبولنجر وRSI وMACD والحجم، مع أدوات الرسم. اختر سهمًا آخر من زر البحث داخل الشارت. الأسعار المعدلة للتوزيعات (ADJ) كما في TradingView.</p>
+      <p>استراتيجية «مفاتيح جودة السهم»: ستة مفاتيح (اتجاه السهم، التحليل المالي، اتجاه السوق SPUS، مستويات الأسعار، المتوسط 55، MACD) وتُعرض الأسهم التي حققت 5 أو 6 منها، مع شارت تفاعلي لأي سهم من القائمة الشرعية: شموع أو خط، يومي وأسبوعي وشهري، المتوسطات المتحركة وبولنجر وRSI وMACD والحجم، وأدوات الرسم. اختر سهمًا آخر من زر البحث داخل الشارت.</p>
     </div>
+    <div class="sc-tabs" role="tablist" aria-label="أقسام التحليل الفني">
+      <button type="button" role="tab" data-tab-button="chart" aria-selected="true">الشارت</button>
+      <button type="button" role="tab" data-tab-button="scanner" aria-selected="false">مفاتيح جودة السهم</button>
+      <button type="button" role="tab" data-tab-button="watch" aria-selected="false">قائمة المراقبة <span class="sc-count" id="sc-watch-count" hidden></span></button>
+    </div>
+    <section id="sc-scanner" class="sc-section" data-tabpanel="scanner" aria-label="مفاتيح جودة السهم"><p class="cq-empty" role="status">جار تحميل المفاتيح…</p></section>
+    <section id="sc-watch" class="sc-section" data-tabpanel="watch" aria-label="قائمة المراقبة"></section>
     <div data-tabpanel="chart">
+      <div id="sc-card" class="sc-card-slot" hidden></div>
       <section class="ta-panel company-quote" aria-label="شارت السهم">
         <div id="ta-chart" class="cq-chart-panel ta-chart"><p class="cq-empty" id="ta-status" role="status">جار تحميل الشارت…</p></div>
       </section>
@@ -36,7 +45,7 @@
     <noscript><p class="financial-status">يرجى تفعيل JavaScript لعرض الشارت.</p></noscript>
   </main>
   <script src="company-chart.js?v=1" defer></script>
-  <script src="technical-analysis.js?v=1" defer></script>
+  <script src="technical-analysis.js?v=ta-us-20261119" defer></script>
   <script src="layout.js?v=1" defer></script>
 </body>
 </html>
