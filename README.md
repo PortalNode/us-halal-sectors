@@ -10,6 +10,8 @@
 | قائمة الشركات الشرعية | حيازات صندوق **SPUS** (SP Funds S&P 500 Sharia Industry Exclusions ETF) المتتبع لمؤشر S&P 500 Shariah؛ ملف CSV منشور يوميًا من SP Funds |
 | الأسعار والتقييم والأداء والنتائج المالية | TradingView Scanner (America) |
 | الشموع اليومية (شارت التحليل الفني) | Yahoo Finance (chart API) |
+| النتائج الربعية (آخر 8 أرباع) | TradingView |
+| نبذة الشركة، تاريخ التأسيس والإدراج | Wikidata، ووصف النشاط من ويكيبيديا (العربية ثم الإنجليزية) |
 | الشعارات | TradingView |
 | المؤشر المرجعي | سعر صندوق SPUS (لا يوجد مؤشر S&P 500 Shariah مجاني بيانات مباشرة) |
 
@@ -18,6 +20,7 @@
 ## التشغيل محليًا
 ```bash
 python3 scripts/build_data.py   # data.json + financials.json + logos/
+python3 scripts/build_profiles.py # company-profiles.json (مرة واحدة، ~5 دقائق)
 python3 scripts/build_ohlc.py   # ohlc/*.json (بطيء عمدًا لتفادي حظر Yahoo، ~6 دقائق)
 python3 -m http.server 8000     # ثم افتح http://localhost:8000
 ```

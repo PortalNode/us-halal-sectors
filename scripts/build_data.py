@@ -48,6 +48,10 @@ COLS = [
     "total_assets_fy_h", "free_cash_flow_fy_h", "ebitda_fy_h", "fiscal_period_fy_h",
     "gross_profit_fy_h", "total_debt_fy_h", "earnings_per_share_basic_fy_h",
     "dps_common_stock_prim_issue_fy_h", "capital_expenditures_unchanged_fy_h",
+    # النتائج الربعية (الأحدث أولًا)
+    "fiscal_period_end_fq", "total_revenue_fq_h", "gross_profit_fq_h", "ebitda_fq_h", "net_income_fq_h",
+    "earnings_per_share_diluted_fq_h", "free_cash_flow_fq_h", "total_assets_fq_h", "total_debt_fq_h",
+    "capital_expenditures_unchanged_fq_h",
 ]
 
 
@@ -118,6 +122,34 @@ def fetch_logo(args):
         return symbol, True
     except Exception:
         return symbol, False
+
+
+def quarter_labels(current, count):
+    """«2026-Q4» → [«2026-Q4», «2026-Q3», …] بالترتيب العكسي (الأحدث أولًا)."""
+    try:
+        year, quarter = current.split("-Q")
+        year, quarter = int(year), int(quarter)
+    except Exception:
+        return []
+    labels = []
+    for _ in range(count):
+        labels.append(f"{year}-Q{quarter}")
+        quarter -= 1
+        if quarter == 0:
+            quarter, year = 4, year - 1
+    return labels
+
+
+def quarterly_block(row):
+    """آخر 8 أرباع؛ الربع الأحدث هو fiscal_period_current، والأقدم بالتسلسل."""
+    fields = {"revenue": "total_revenue_fq_h", "grossProfit": "gross_profit_fq_h", "ebitda": "ebitda_fq_h",
+              "netIncome": "net_income_fq_h", "eps": "earnings_per_share_diluted_fq_h",
+              "freeCashFlow": "free_cash_flow_fq_h", "assets": "total_assets_fq_h", "debt": "total_debt_fq_h",
+              "capex": "capital_expenditures_unchanged_fq_h"}
+    series = {key: (row.get(field) or [])[:8] for key, field in fields.items()}
+    count = max((len(v) for v in series.values()), default=0)
+    end = row.get("fiscal_period_end_fq")
+    return {"labels": quarter_labels(row.get("fiscal_period_current") or "", count), "latestEnd": end, **series}
 
 
 def main():
@@ -226,6 +258,7 @@ def main():
                     ("freeCashFlow", "free_cash_flow_fy_h"), ("capex", "capital_expenditures_unchanged_fy_h"))},
             },
         }
+        financials[ticker]["quarterly"] = quarterly_block(row)
         logo_jobs.append((ticker, row.get("logoid"), force_logos))
 
     logo_jobs.append((INDEX_SYMBOL, index_row.get("logoid"), force_logos))
