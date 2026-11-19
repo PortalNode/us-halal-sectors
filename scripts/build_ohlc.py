@@ -25,54 +25,95 @@ RECENT = 480
 HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
 
 
-_started = time.time()
+_yahoo_blocked_until = 0.0
+NASDAQ = "https://api.nasdaq.com/api/quote/{sym}/historical?assetclass={cls}&fromdate={start}&limit=1600&todate={end}"
+SPLITS = [1.5, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 25, 30, 40, 50]
 
 
-def fetch(symbol):
-    """طلب واحد بطيء؛ عند الحظر (429) ننتظر دقيقتين ونعيد نفس السهم حتى ساعة كاملة ثم نستسلم."""
-    ysym = symbol.replace(".", "-")
-    attempt = 0
-    while time.time() - _started < 3600 * 2:
-        host = HOSTS[attempt % 2]
-        attempt += 1
-        url = f"https://{host}/v8/finance/chart/{ysym}?range=5y&interval=1d&events=div"
+def day(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).astimezone(NY).strftime("%Y-%m-%d")
+
+
+def yahoo(symbol):
+    """Yahoo: شموع معدّلة للتجزئة + التوزيعات. عند الحظر (429) نتوقف عنه 15 دقيقة حتى لا نطيل الحظر."""
+    global _yahoo_blocked_until
+    if time.time() < _yahoo_blocked_until:
+        return None
+    url = f"https://{HOSTS[0]}/v8/finance/chart/{symbol.replace('.', '-')}?range=5y&interval=1d&events=div"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            result = json.load(r)["chart"]["result"][0]
+        time.sleep(1.0)
+    except urllib.error.HTTPError as error:
+        if error.code == 429:
+            _yahoo_blocked_until = time.time() + 900
+        return None
+    except Exception:
+        return None
+    quote = result["indicators"]["quote"][0]
+    rows = {}
+    for i, ts in enumerate(result.get("timestamp") or []):
+        o, h, l, c, v = (quote[k][i] for k in ("open", "high", "low", "close", "volume"))
+        if None not in (o, h, l, c):
+            rows[day(ts)] = (day(ts), round(o, 4), round(h, 4), round(l, 4), round(c, 4), int(v or 0))
+    dividends = sorted([day(int(k)), round(v["amount"], 6)] for k, v in (result.get("events", {}).get("dividends") or {}).items())
+    return [rows[d] for d in sorted(rows)], dividends, "Yahoo Finance"
+
+
+def adjust_splits(rows):
+    """Nasdaq يعطي أسعارًا خام: نكشف التجزئة (قفزة في السعر يقابلها قفزة معاكسة في الحجم) ونعدّل ما قبلها."""
+    rows = [list(r) for r in rows]
+    for i in range(len(rows) - 1, 0, -1):
+        prev, cur = rows[i - 1], rows[i]
+        if not cur[4] or not prev[4]:
+            continue
+        ratio = prev[4] / cur[4]  # >1: تجزئة عادية، <1: تجزئة عكسية
+        n = ratio if ratio >= 1 else 1 / ratio
+        near = min(SPLITS, key=lambda k: abs(k - n))
+        if abs(n - near) / near > 0.12 or n < 1.4:
+            continue
+        vol = (cur[5] / prev[5]) if prev[5] else 0
+        if (ratio >= 1 and vol > near * 0.5) or (ratio < 1 and 0 < vol < 2 / near):
+            factor = near if ratio >= 1 else 1 / near
+            for j in range(i):
+                for k in (1, 2, 3, 4):
+                    rows[j][k] = round(rows[j][k] / factor, 4)
+                rows[j][5] = int(rows[j][5] * factor)
+    return [tuple(r) for r in rows]
+
+
+def nasdaq(symbol):
+    end = datetime.now(NY)
+    start = end.replace(year=end.year - 5)
+    money = lambda x: float(x.replace("$", "").replace(",", ""))
+    for cls in ("stocks", "etf"):
+        url = NASDAQ.format(sym=symbol, cls=cls, start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"))
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=30) as r:
-                result = json.load(r)["chart"]["result"][0]
-            time.sleep(1.5)  # تهدئة بين الطلبات لتفادي الحظر
-            return result
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                return None
-            time.sleep(120 if error.code == 429 else 10)
+                table = (json.load(r).get("data") or {}).get("tradesTable") or {}
+            time.sleep(0.4)
         except Exception:
-            time.sleep(10)
+            time.sleep(2)
+            continue
+        rows = []
+        for x in table.get("rows") or []:
+            try:
+                m, d, y = x["date"].split("/")
+                vol = x.get("volume") or ""
+                vol = int(vol.replace(",", "")) if vol.replace(",", "").isdigit() else 0
+                rows.append((f"{y}-{m}-{d}", money(x["open"]), money(x["high"]), money(x["low"]), money(x["close"]), vol))
+            except (ValueError, KeyError):
+                continue
+        if rows:
+            return adjust_splits(sorted(rows)), [], "Nasdaq (معدّل للتجزئة)"
     return None
 
 
 def build(symbol):
-    result = fetch(symbol)
-    if not result or not result.get("timestamp"):
-        return symbol, None
-    quote = result["indicators"]["quote"][0]
-    rows = []
-    for i, ts in enumerate(result["timestamp"]):
-        o, h, l, c, v = (quote[k][i] for k in ("open", "high", "low", "close", "volume"))
-        if None in (o, h, l, c):
-            continue
-        date = datetime.fromtimestamp(ts, timezone.utc).astimezone(NY).strftime("%Y-%m-%d")
-        rows.append((date, round(o, 4), round(h, 4), round(l, 4), round(c, 4), int(v or 0)))
-    # يوم مكرر (آخر شمعة لحظية) → نبقي الأخيرة
-    unique = {}
-    for row in rows:
-        unique[row[0]] = row
-    rows = [unique[d] for d in sorted(unique)]
-    dividends = sorted(
-        [datetime.fromtimestamp(int(k), timezone.utc).astimezone(NY).strftime("%Y-%m-%d"), round(v["amount"], 6)]
-        for k, v in (result.get("events", {}).get("dividends") or {}).items()
-    )
-    return symbol, (rows, dividends)
+    built = yahoo(symbol) or nasdaq(symbol)
+    return symbol, built
 
 
 def pack(symbol, rows, dividends, source, official_through, history_through=None):
@@ -98,14 +139,14 @@ def main():
     if len(sys.argv) > 1:
         symbols = sys.argv[1:]
     mode = data["priceSource"]["mode"]
-    source = "TradingView · إغلاق الجلسة" if mode == "close" else "Yahoo Finance · شموع متأخرة"
     missing = []
     with ThreadPoolExecutor(1) as pool:
         for symbol, built in pool.map(build, symbols):
             if not built:
                 missing.append(symbol)
                 continue
-            rows, dividends = built
+            rows, dividends, how = built
+            source = f"{how} · " + ("إغلاق الجلسة" if mode == "close" else "شموع متأخرة")
             last = rows[-1][0]
             through = last if mode == "close" else (rows[-2][0] if len(rows) > 1 else last)
             if len(rows) <= RECENT:
