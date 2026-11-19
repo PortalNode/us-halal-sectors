@@ -9,7 +9,7 @@
 |---|---|
 | قائمة الشركات الشرعية | حيازات صندوق **SPUS** (SP Funds S&P 500 Sharia Industry Exclusions ETF) المتتبع لمؤشر S&P 500 Shariah؛ ملف CSV منشور يوميًا من SP Funds |
 | الأسعار والتقييم والأداء والنتائج المالية | TradingView Scanner (America) |
-| الشموع اليومية (شارت التحليل الفني) | Yahoo Finance ثم Nasdaq احتياطيًا للأسهم؛ مؤشر S&P 500 من Cboe |
+| الشموع اليومية من 2010-01-01 (شارت التحليل الفني) | واجهتا Nasdaq العامتان `historical` و`chart` (معدّلة للتجزئة وغير معدّلة للتوزيعات، كإعداد TradingView الافتراضي)؛ مؤشر S&P 500 من Cboe |
 | النتائج الربعية (من الربع الأول لسنة 2022 إلى آخر ربع معلن، 9 بنود) | TradingView (`financials.json` ← `quarterly`) |
 | نبذة الشركة، تاريخ التأسيس والإدراج | Wikidata، ووصف النشاط من ويكيبيديا (العربية ثم الإنجليزية) |
 | الشعارات | TradingView |
@@ -21,7 +21,8 @@
 ```bash
 python3 scripts/build_data.py   # data.json + financials.json + logos/
 python3 scripts/build_profiles.py # company-profiles.json (مرة واحدة، ~5 دقائق)
-python3 scripts/build_ohlc.py   # ohlc/*.json (بطيء عمدًا لتفادي حظر Yahoo، ~6 دقائق)
+python3 scripts/build_ohlc.py   # ohlc/*.json منذ 2010 (~5 دقائق؛ --full يعيد كتابة التاريخ كله)
+python3 scripts/check_candles.py # مقارنة الشموع بأرقام TradingView (الأداء 1/3/5/10 سنوات وأعلى/أدنى 52 أسبوعًا والحجم)
 python3 -m http.server 8000     # ثم افتح http://localhost:8000
 ```
 بايثون 3.9+ بلا مكتبات خارجية.
