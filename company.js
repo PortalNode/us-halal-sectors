@@ -1,5 +1,7 @@
 // صفحة «نتائج الشركات»: النتائج المالية السنوية لكل شركة (من financials.json) مع نبذة وبطاقة السهم.
 // بطاقة السهم والشارت المصغر يضيفهما company-quote.js تحت النبذة، اعتمادًا على شارة الرمز في العنوان.
+// الفترات (ربع / 6 أشهر / 9 أشهر / سنوي / أرباع متتالية) كما في صفحات السوق السعودي: quarterly-periods.mjs.
+import { PERIODS, QUARTER_NAMES, METRICS as QMETRICS, periodRange, periodUnit, quarterLabel, numericValue, companyFromFinancials, buildPeriodColumns, renderPeriodTable, MONTH_NAMES, isCalendarYear, monthRange } from './quarterly-periods.mjs?v=us-q-20261119';
 (() => {
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -18,7 +20,11 @@
     ['grossMargin', 'هامش إجمالي الربح', 'pct', ['grossProfit', 'revenue']], ['netMargin', 'هامش صافي الربح', 'pct', ['netIncome', 'revenue']],
     ['fcfMargin', 'هامش التدفق النقدي الحر', 'pct', ['freeCashFlow', 'revenue']]
   ];
-  const state = { data: null, fin: null, profiles: {}, symbol: null, metric: 'netIncome', period: 'fy' };
+  const state = { data: null, fin: null, profiles: {}, symbol: null, metric: 'netIncome', period: 'fy', quarter: null };
+  let qCompany = null, periodColumns = []; // سجل الشركة الربعي وأعمدة الفترة المختارة (غير السنوية)
+  const periodSummary = () => state.period === 'q' ? (state.quarter === 'seq' ? 'آخر الأرباع المتتالية' : `الربع ${QUARTER_NAMES[state.quarter]} عبر السنوات`)
+    : state.period === 'fy' ? 'النتائج السنوية' : `${PERIODS[state.period].label} (${periodRange(state.period, qCompany?.fiscalYearEnd)})`;
+  const latestQuarterKey = () => Object.keys(qCompany?.quarters || {}).sort().at(-1) || null;
 
   // الفترة: 'fy' سنوي (آخر 5 سنوات مالية) أو 'q' ربعي (آخر 8 أرباع). الأحدث أولًا في المصفوفات.
   const periodData = company => {
@@ -171,7 +177,16 @@
     $('kf').innerHTML = cells.map(([label, value, unit]) => `<div class="key-figure"><dt title="${esc(label)}">${esc(label)}</dt><dd>${esc(value)}</dd><small><span>${esc(unit) || '&nbsp;'}</span></small></div>`).join('');
   }
 
+  function periodTable() {
+    const sequential = state.period === 'q' && state.quarter === 'seq';
+    const shown = QMETRICS.filter(m => periodColumns.some(c => numericValue(c.values?.[m.key]) !== null));
+    $('bank-table-wrap').innerHTML = periodColumns.length
+      ? renderPeriodTable(qCompany, periodColumns, { sequential, caption: periodSummary(), metrics: shown })
+      : '<p class="financial-status">لا تتوفر نتائج ربعية لهذه الفترة في المصدر.</p>';
+  }
+
   function table(company) {
+    if (state.period !== 'fy') return periodTable();
     const { labels, step } = periodData(company);
     if (!labels.length) { $('bank-table-wrap').innerHTML = `<p class="financial-status">لا تتوفر نتائج ${state.period === 'q' ? 'ربعية' : 'سنوية'} لهذه الشركة في المصدر.</p>`; return; }
     const order = labels.map((_, i) => i).reverse(); // الأقدم أولًا ثم الأحدث
@@ -184,7 +199,46 @@
     $('bank-table-wrap').innerHTML = `<table class="annual-table"><caption class="sr-only">النتائج المالية ${state.period === 'q' ? 'الربعية' : 'السنوية'}</caption><thead>${head}</thead><tbody>${rows}</tbody></table>`;
   }
 
+  function drawBars(title, items, kind) {
+    $('bank-charts-context').textContent = title;
+    if (!items.length) { $('bank-charts-grid').innerHTML = '<p class="financial-status">لا تتوفر بيانات لهذا البند.</p>'; return; }
+    const vals = items.map(x => x.value);
+    const max = Math.max(0, ...vals), min = Math.min(0, ...vals), span = max - min || 1;
+    const W = 560, H = 240, pad = 34, gap = (W - pad * 2) / items.length, bw = Math.min(70, gap - 12), y = v => pad + (max - v) / span * (H - pad * 2);
+    const text = v => kind === 'money' ? f0.format(v) : f2.format(v) + (kind === 'percent' ? '%' : '');
+    const out = items.map((item, k) => {
+      const v = item.value, x = pad + gap * k + (gap - bw) / 2, top = y(Math.max(v, 0)), h = Math.abs(y(v) - y(0));
+      return `<g><rect x="${x}" y="${top}" width="${bw}" height="${Math.max(h, 1)}" rx="3" fill="${v < 0 ? 'var(--red)' : 'var(--teal)'}"><title>${esc(item.label)}: ${text(v)}</title></rect><text x="${x + bw / 2}" y="${v < 0 ? top + h + 14 : top - 6}" text-anchor="middle" font-size="12" fill="currentColor">${text(v)}</text><text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="${items.length > 6 ? 10 : 12}" fill="currentColor" opacity=".7">${esc(item.label)}</text></g>`;
+    }).join('');
+    $('bank-charts-grid').innerHTML = `<div class="bank-chart-card" style="padding:12px"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}" style="width:100%;height:auto;max-height:320px;direction:ltr"><line x1="${pad}" x2="${W - pad}" y1="${y(0)}" y2="${y(0)}" stroke="currentColor" opacity=".25"/>${out}</svg></div>`;
+  }
+
+  function periodBars() {
+    const metric = QMETRICS.find(m => m.key === state.metric) || QMETRICS.find(m => m.key === 'netIncome');
+    const kind = periodUnit(metric.key);
+    const items = periodColumns.map(c => ({ label: c.chartLabel ?? c.label, value: numericValue(c.values?.[metric.key]) })).filter(x => x.value !== null).map(x => ({ ...x, value: kind === 'percent' ? x.value * 100 : x.value }));
+    const unitName = kind === 'money' ? 'مليون دولار' : kind === 'usd' ? 'دولار للسهم' : 'نسبة مئوية';
+    drawBars(`${qCompany?.name ?? ''} · ${metric.label} · ${unitName} · ${periodSummary()}`, items, kind === 'usd' ? 'ps' : kind);
+  }
+
+  // قائمة بنود الرسم تتبع الفترة: بنود الأرباع غير بنود السنوي (ربحية السهم الأساسية والتوزيع سنويان فقط)
+  function fillMetricSelect() {
+    const sel = $('bank-chart-metric');
+    const options = state.period === 'fy' ? METRICS.map(([k, l]) => [k, l]) : QMETRICS.filter(m => periodColumns.some(c => numericValue(c.values?.[m.key]) !== null)).map(m => [m.key, m.label]);
+    if (!options.some(([k]) => k === state.metric)) state.metric = options.some(([k]) => k === 'netIncome') ? 'netIncome' : options[0]?.[0] ?? 'netIncome';
+    sel.innerHTML = options.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
+    sel.value = state.metric;
+  }
+
+  function syncPeriodControls() {
+    for (const b of document.querySelectorAll('#bank-period-seg [data-period]')) b.setAttribute('aria-pressed', String(b.dataset.period === state.period));
+    for (const b of document.querySelectorAll('#bank-quarter-seg [data-quarter]')) b.setAttribute('aria-pressed', String(b.dataset.quarter === state.quarter));
+    $('bank-quarter-group').hidden = state.period !== 'q';
+    for (const b of document.querySelectorAll('#bank-period-seg [data-period]')) { const off = b.dataset.period !== 'fy' && !qCompany; b.disabled = off; b.title = off ? 'لا تتوفر نتائج ربعية لهذه الشركة' : ''; }
+  }
+
   function bars(company) {
+    if (state.period !== 'fy') return periodBars();
     const metric = METRICS.find(m => m[0] === state.metric) || METRICS[3];
     const s = series(company, metric[0]);
     const { labels } = periodData(company);
@@ -208,22 +262,39 @@
     if (!stock) { $('bank-load-status').textContent = 'لا توجد شركة بهذا الرمز في القائمة الشرعية.'; return; }
     state.symbol = symbol;
     const company = state.fin.companies[symbol];
+    qCompany = companyFromFinancials(symbol, stock.name, company);
+    if (state.period !== 'fy' && !qCompany) state.period = 'fy';
+    if (!['1', '2', '3', '4', 'seq'].includes(state.quarter)) state.quarter = (latestQuarterKey() || 'x0').slice(5) || 'seq';
+    periodColumns = state.period !== 'fy' ? buildPeriodColumns(qCompany, state.period, state.quarter) : [];
     write('us-halal-results-symbol', symbol);
-    if (push) { try { history.replaceState(null, '', `company.html?symbol=${encodeURIComponent(symbol)}`); } catch { /* ignore */ } }
-    document.title = `${stock.name} | النتائج السنوية | السوق الأمريكي الشرعي`;
+    write('us-halal-results-period', state.period);
+    if (push || true) {
+      try {
+        const url = new URL(location.href);
+        url.search = '';
+        url.searchParams.set('symbol', symbol);
+        if (state.period !== 'fy') url.searchParams.set('period', state.period);
+        if (state.period === 'q') url.searchParams.set('q', state.quarter);
+        history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      } catch { /* ignore */ }
+    }
+    document.title = `${stock.name} | ${periodSummary()} | السوق الأمريكي الشرعي`;
     $('crumb').textContent = `نتائج ${sector.name}`;
     $('bank-title').innerHTML = `${esc(stock.name)} <span class="symbol-badge">${esc(symbol)}</span>`;
     const fy = company?.annual?.years || [];
-    $('bank-period-badge').innerHTML = state.period === 'q'
-      ? (company?.quarterly?.labels?.length ? `آخر ${Math.min(8, company.quarterly.labels.length)} أرباع <bdi>${labelOf(company.quarterly.labels[Math.min(7, company.quarterly.labels.length - 1)])} – ${labelOf(company.quarterly.labels[0])}</bdi>` : '')
+    $('bank-period-badge').innerHTML = state.period !== 'fy' && latestQuarterKey()
+      ? `آخر ربع متاح <bdi dir="ltr">${quarterLabel(latestQuarterKey())}</bdi>`
       : (fy.length ? `آخر ${Math.min(5, fy.length)} سنوات مالية <bdi>${fy[Math.min(4, fy.length - 1)]}–${fy[0]}</bdi>` : '');
+    syncPeriodControls();
     $('company-profile').innerHTML = profile(stock, sector, company);
     const timeline = document.querySelector('#company-profile .cp-timeline');
     if (timeline && tickObserver) { tickObserver.disconnect(); tickObserver.observe(timeline); }
-    $('unit-note').textContent = state.period === 'q'
-      ? 'المبالغ بمليون دولار أمريكي ما لم يُذكر غير ذلك، والأرباع مرقّمة حسب السنة المالية للشركة (قد تختلف عن السنة الميلادية). التغير مقارنة بالربع نفسه من السنة السابقة. المصدر: TradingView.'
+    const fye = qCompany?.fiscalYearEnd, offYear = qCompany && !isCalendarYear(fye);
+    $('unit-note').textContent = state.period !== 'fy'
+      ? `المبالغ بمليون دولار أمريكي وربحية السهم بالدولار. الأرباع مرقّمة حسب السنة المالية للشركة${offYear ? ` (تنتهي في ${MONTH_NAMES[fye]}، فالربع الأول ${monthRange(fye, 1, 1)})` : ' (تنتهي في ديسمبر)'}؛ 6 أشهر = الربعان الأول والثاني، و9 أشهر = الأرباع الثلاثة الأولى. الأصول والدين بنهاية الفترة. التغير مقارنة بالفترة نفسها من السنة السابقة. المصدر: TradingView.`
       : 'المبالغ بمليون دولار أمريكي ما لم يُذكر غير ذلك، والسنة المالية قد تنتهي في غير ديسمبر. التغير سنوي مقارنة بالسنة السابقة، وللنسب بالنقاط المئوية. المصدر: TradingView.';
     keyFigures(company);
+    fillMetricSelect();
     table(company);
     bars(company);
     $('bank-load-status').hidden = true;
@@ -237,18 +308,18 @@
       state.data = data; state.fin = fin; state.profiles = profiles || {};
     } catch (error) { $('bank-load-status').textContent = 'تعذر تحميل بيانات الشركات.'; return; }
     pickers();
-    for (const button of document.querySelectorAll('[data-period]')) {
-      button.addEventListener('click', () => {
-        state.period = button.dataset.period;
-        write('us-halal-results-period', state.period);
-        for (const b of document.querySelectorAll('[data-period]')) b.setAttribute('aria-pressed', String(b === button));
-        show(state.symbol, { push: false });
-      });
+    const params0 = new URLSearchParams(location.search);
+    const storedPeriod = read('us-halal-results-period');
+    const wantedPeriod = params0.get('period') ?? (params0.has('symbol') ? 'fy' : storedPeriod);
+    if (['q', 'h1', 'm9'].includes(wantedPeriod)) state.period = wantedPeriod;
+    if (['1', '2', '3', '4', 'seq'].includes(params0.get('q'))) state.quarter = params0.get('q');
+    for (const button of document.querySelectorAll('#bank-period-seg [data-period]')) {
+      button.addEventListener('click', () => { state.period = button.dataset.period; show(state.symbol, { push: false }); });
     }
-    if (read('us-halal-results-period') === 'q') { state.period = 'q'; for (const b of document.querySelectorAll('[data-period]')) b.setAttribute('aria-pressed', String(b.dataset.period === 'q')); }
+    for (const button of document.querySelectorAll('#bank-quarter-seg [data-quarter]')) {
+      button.addEventListener('click', () => { state.quarter = button.dataset.quarter; show(state.symbol, { push: false }); });
+    }
     const sel = $('bank-chart-metric');
-    sel.innerHTML = METRICS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
-    sel.value = state.metric;
     sel.addEventListener('change', () => { state.metric = sel.value; bars(state.fin.companies[state.symbol]); });
     const params = new URLSearchParams(location.search);
     const all = state.data.sectors.flatMap(s => s.stocks);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""شموع يومية من Yahoo Finance لكل سهم في data.json (+ صندوق SPUS كمؤشر مرجعي).
+"""شموع يومية من Yahoo Finance لكل سهم في data.json (+ مؤشر S&P 500 المرجعي من Cboe).
 
 ohlc/<الرمز>.json          آخر ~480 جلسة، يُحدَّث يوميًا (ويحمل historyThrough)
 ohlc/history/<الرمز>.json  ما قبلها (5 سنوات في الإجمال)، يُكتب مرة واحدة إن لم يوجد
@@ -23,6 +23,7 @@ NY = ZoneInfo("America/New_York")
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
 RECENT = 480
 HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
+INDEX_SYMBOL = "SPX"  # المؤشر المرجعي (يطابق marketSummary.indexSymbol في data.json)
 
 
 _yahoo_blocked_until = 0.0
@@ -111,7 +112,33 @@ def nasdaq(symbol):
     return None
 
 
+CBOE_SPX = "https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_SPX.json"
+
+
+def cboe_index():
+    """مؤشر S&P 500 نفسه (لا صندوقًا): شموع يومية من Cboe، لا حجم فيها (الحجم 0). Yahoo/Nasdaq لا يخدمان المؤشر."""
+    try:
+        req = urllib.request.Request(CBOE_SPX, headers={"User-Agent": UA, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as r:  # يتبع التحويل 307 إلى cdn-api.cboe.com
+            data = json.load(r)["data"]
+    except Exception:
+        return None
+    end = datetime.now(NY)
+    start = end.replace(year=end.year - 5).strftime("%Y-%m-%d")
+    rows = []
+    for x in data:
+        try:
+            o, h, l, c = (round(float(x[k]), 2) for k in ("open", "high", "low", "close"))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if x["date"] >= start and min(o, h, l, c) > 0:
+            rows.append((x["date"], o, h, l, c, 0))
+    return (rows, [], "Cboe (مؤشر S&P 500)") if rows else None
+
+
 def build(symbol):
+    if symbol == INDEX_SYMBOL:
+        return symbol, cboe_index()
     built = yahoo(symbol) or nasdaq(symbol)
     return symbol, built
 

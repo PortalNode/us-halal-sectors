@@ -17,7 +17,7 @@ import { KEY_IDS, KEY_LABELS, MIN_SCORE, DIVIDEND_MIN, computeKeys, financialKey
 const ROOT = new URL('../', import.meta.url);
 const OUT = new URL('scanner/signals.json', ROOT);
 const OHLC_DIR = new URL('ohlc/', ROOT);
-const INDEX_SYMBOL = 'SPUS';          // المؤشر المرجعي للموقع (مفتاح السوق)
+const INDEX_SYMBOL = 'SPX';           // المؤشر المرجعي للموقع (مفتاح السوق)
 const WARMUP = 250;                   // جلسات لازمة قبل الحكم (متوسط 200 مع هامش)
 const MIN_AVG_VALUE = 1e7;            // متوسط قيمة التداول 20 جلسة (دولار)
 const r = (x, d = 2) => x == null || !Number.isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d;
@@ -53,8 +53,10 @@ if (!newest || (publishedDate && newest > publishedDate)) {
 }
 
 const indexFile = await readCandles(OHLC_DIR, INDEX_SYMBOL);
-const market = marketKey(indexFile?.c);
-meta.market = { symbol: INDEX_SYMBOL, trend: market.trend, date: indexFile?.d?.at(-1) ?? null, stale: indexFile?.d?.at(-1) !== newest, detail: market.detail };
+// مفتاح السوق يُحسب حتى تاريخ الفحص نفسه: شموع المؤشر قد تسبق شموع الأسهم بجلسة
+const indexUpTo = (indexFile?.d ?? []).filter(d => d <= newest).length;
+const market = marketKey(indexFile?.c?.slice(0, indexUpTo));
+meta.market = { symbol: INDEX_SYMBOL, trend: market.trend, date: indexFile?.d?.[indexUpTo - 1] ?? null, stale: indexFile?.d?.[indexUpTo - 1] !== newest, detail: market.detail };
 const financials = loadFinancials(new URL('financials.json', ROOT));
 
 const skip = (reason, symbol) => (meta.excluded[reason] ||= []).push(symbol);

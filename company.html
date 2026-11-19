@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="theme.css?v=1">
   <link rel="stylesheet" href="company-profile.css?v=1">
   <link rel="stylesheet" href="company-quote.css?v=1">
+  <link rel="stylesheet" href="quarterly-periods.css?v=us-q-20261119">
   <link rel="stylesheet" href="layout.css?v=1">
   <link rel="stylesheet" href="mobile.css?v=1">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -32,7 +33,10 @@
         <span class="bank-period" id="bank-period-badge"></span>
       </div>
       <div id="company-profile" class="company-profile"></div>
-      <div class="table-tools" style="margin:14px 0 4px"><span class="table-tools-label">الفترة</span><div class="col-switch" role="group" aria-label="نوع الفترة"><button type="button" data-period="fy" aria-pressed="true">سنوي</button><button type="button" data-period="q" aria-pressed="false">ربعي</button></div></div>
+      <div class="period-bar" id="bank-period-bar">
+        <div class="period-group"><span>الفترة</span><div class="period-seg" id="bank-period-seg" role="group" aria-label="نوع الفترة"><button type="button" data-period="q" aria-pressed="false">ربع</button><button type="button" data-period="h1" aria-pressed="false">6 أشهر</button><button type="button" data-period="m9" aria-pressed="false">9 أشهر</button><button type="button" data-period="fy" aria-pressed="true">سنوي</button></div></div>
+        <div class="period-group" id="bank-quarter-group" hidden><span>الربع</span><div class="period-seg small" id="bank-quarter-seg" role="group" aria-label="اختيار الربع"><button type="button" data-quarter="1" aria-pressed="false">Q1</button><button type="button" data-quarter="2" aria-pressed="false">Q2</button><button type="button" data-quarter="3" aria-pressed="false">Q3</button><button type="button" data-quarter="4" aria-pressed="false">Q4</button><button type="button" data-quarter="seq" aria-pressed="true">متتالية</button></div></div>
+      </div>
       <p class="key-figures-title" id="kf-title"></p>
       <dl class="key-figures" id="kf"></dl>
       <p class="bank-unit-note" id="unit-note"></p>
@@ -45,8 +49,8 @@
     </section>
     <noscript><p class="financial-status">يرجى تفعيل JavaScript لعرض بيانات الشركات.</p></noscript>
   </main>
-  <script src="company.js?v=1" defer></script>
-  <script src="company-chart.js?v=1" defer></script>
+  <script type="module" src="company.js?v=us-q-20261119"></script>
+  <script src="company-chart.js?v=spx-20261119" defer></script>
   <script src="company-quote.js?v=1" defer></script>
   <script src="layout.js?v=1" defer></script>
 </body>

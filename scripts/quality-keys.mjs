@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { sma, macd } from '../scanner/indicators.mjs';
 
 export const KEY_IDS = ['trend', 'fin', 'market', 'levels', 'sma55', 'macd'];
-export const KEY_LABELS = { trend: 'اتجاه السهم', fin: 'التحليل المالي', market: 'جودة السوق SPUS', levels: 'مستويات الأسعار', sma55: 'المتوسط 55 يوم', macd: 'مؤشر MACD' };
+export const KEY_LABELS = { trend: 'اتجاه السهم', fin: 'التحليل المالي', market: 'جودة السوق S&P 500', levels: 'مستويات الأسعار', sma55: 'المتوسط 55 يوم', macd: 'مؤشر MACD' };
 export const MIN_SCORE = 5;
 export const DIVIDEND_MIN = 2.5; // نسبة التوزيعات المفضلة (%): وسم فقط ولا تدخل في العدّ
 
@@ -21,12 +21,12 @@ export function trendAt(close, i) {
   return { trend: up ? 'up' : down ? 'down' : 'side', sma50: a, sma200: b };
 }
 
-// مفتاح السوق: اتجاه المؤشر المرجعي للموقع (صندوق SPUS المتتبع لمؤشر S&P 500 الشرعي، شموعه في ohlc/SPUS.json) بنفس تعريف
+// مفتاح السوق: اتجاه المؤشر المرجعي للموقع (مؤشر S&P 500، شموعه في ohlc/SPX.json) بنفس تعريف
 // مفتاح السهم، قيمة واحدة لكل الأسهم.
 export function marketKey(indexClose) {
-  if (!indexClose || indexClose.length < 221) return { ...key(false, 'شموع SPUS غير كافية'), trend: 'na' };
+  if (!indexClose || indexClose.length < 221) return { ...key(false, 'شموع S&P 500 غير كافية'), trend: 'na' };
   const { trend } = trendAt(indexClose, indexClose.length - 1);
-  return { ...key(trend === 'up', trend === 'up' ? 'مؤشر السوق (SPUS) في اتجاه صاعد' : trend === 'down' ? 'مؤشر السوق (SPUS) في اتجاه هابط' : 'مؤشر السوق (SPUS) عرضي / غير واضح'), trend };
+  return { ...key(trend === 'up', trend === 'up' ? 'مؤشر S&P 500 في اتجاه صاعد' : trend === 'down' ? 'مؤشر S&P 500 في اتجاه هابط' : 'مؤشر S&P 500 عرضي / غير واضح'), trend };
 }
 
 // [قديمة، تبقى كمرجع في scripts/backtest/sr-eval.mjs؛ الماسح يستعمل sr-levels.mjs] دعم ومقاومة من قمم وقيعان الحركة السعرية (لا من المتوسطات): قاع/قمة محورية = أدنى/أعلى سعر بين k شموع قبلها وk بعدها،

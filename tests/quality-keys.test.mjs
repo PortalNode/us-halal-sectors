@@ -13,7 +13,7 @@ test('trend: steady rise is up, steady fall is down, flat is side, short history
   assert.equal(trendAt(rising(100), 99).trend, 'na');
 });
 
-test('market (SPUS) key follows the same trend definition and fails closed without candles', () => {
+test('market (S&P 500) key follows the same trend definition and fails closed without candles', () => {
   assert.equal(marketKey(rising(260)).ok, 1);
   assert.equal(marketKey(falling(260)).ok, 0);
   assert.equal(marketKey(rising(100)).ok, 0);

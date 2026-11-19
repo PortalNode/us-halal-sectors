@@ -25,10 +25,10 @@ function banner() {
   if (!m.valid) return `<div class="sc-banner sc-bad" role="alert"><strong>تعذر التحقق من البيانات، فلا تُعرض أي نتائج.</strong> ${esc(m.reasonInvalid || '')}</div>`;
   const excluded = Object.entries(m.excluded || {}).map(([k, v]) => `${REASON[k] || k}: ${v.length}`).join(' · ');
   const marketOff = m.market && m.market.trend !== 'up';
-  return `<div class="sc-banner" role="note"><strong>استراتيجية «مفاتيح جودة السهم».</strong> لكل سهم ستة مفاتيح: اتجاه السهم، التحليل المالي (صافي ربح آخر 4 أرباع موجب)، اتجاه السوق (صندوق SPUS المتتبع لمؤشر S&P 500 الشرعي)، مستويات الأسعار (عند منطقة دعم وأقرب إليها من المقاومة)، الإغلاق فوق المتوسط 55، وMACD فوق خط الإشارة. المفتاح إما <b>1+</b> أو <b>0</b>، ويظهر السهم إذا حقق <b>${m.minScore} مفاتيح أو أكثر</b> من 6. استراتيجية وصفية لا تتنبأ وليست توصية استثمارية.</div>
+  return `<div class="sc-banner" role="note"><strong>استراتيجية «مفاتيح جودة السهم».</strong> لكل سهم ستة مفاتيح: اتجاه السهم، التحليل المالي (صافي ربح آخر 4 أرباع موجب)، اتجاه مؤشر S&P 500، مستويات الأسعار (عند منطقة دعم وأقرب إليها من المقاومة)، الإغلاق فوق المتوسط 55، وMACD فوق خط الإشارة. المفتاح إما <b>1+</b> أو <b>0</b>، ويظهر السهم إذا حقق <b>${m.minScore} مفاتيح أو أكثر</b> من 6. استراتيجية وصفية لا تتنبأ وليست توصية استثمارية.</div>
   ${m.lagging ? `<div class="sc-banner sc-warn-banner" role="note">المفاتيح محسوبة على إغلاق <bdi class="num">${esc(m.dataDate)}</bdi> لأن شموع <bdi class="num">${esc(m.officialDate)}</bdi> لم تصل بعد؛ أسعار الصفحة الرئيسية أحدث من أسعار هذا الجدول.</div>` : ''}
-  ${marketOff ? `<div class="sc-banner sc-warn-banner" role="note">مفتاح السوق (SPUS) <b>0</b> الآن: ${esc(m.market.detail)}. لذلك لا يمكن لأي سهم تجاوز 5 من 6 حتى يعود المؤشر للاتجاه الصاعد.</div>` : ''}
-  <div class="sc-meta"><span>آخر إغلاق رسمي: <bdi class="num">${esc(m.dataDate)}</bdi></span><span>الأسهم المفحوصة: <bdi class="num">${m.scanned}</bdi> من <bdi class="num">${m.universe}</bdi></span><span>6 من 6: <bdi class="num">${m.counts.six}</bdi> · 5 من 6: <bdi class="num">${m.counts.five}</bdi></span><span>اتجاه السوق (SPUS): ${esc(TREND_LABEL[m.market?.trend] || '—')}</span>${excluded ? `<span>مستبعد: ${esc(excluded)}</span>` : ''}</div>`;
+  ${marketOff ? `<div class="sc-banner sc-warn-banner" role="note">مفتاح السوق (S&P 500) <b>0</b> الآن: ${esc(m.market.detail)}. لذلك لا يمكن لأي سهم تجاوز 5 من 6 حتى يعود المؤشر للاتجاه الصاعد.</div>` : ''}
+  <div class="sc-meta"><span>آخر إغلاق رسمي: <bdi class="num">${esc(m.dataDate)}</bdi></span><span>الأسهم المفحوصة: <bdi class="num">${m.scanned}</bdi> من <bdi class="num">${m.universe}</bdi></span><span>6 من 6: <bdi class="num">${m.counts.six}</bdi> · 5 من 6: <bdi class="num">${m.counts.five}</bdi></span><span>اتجاه S&P 500: ${esc(TREND_LABEL[m.market?.trend] || '—')}</span>${excluded ? `<span>مستبعد: ${esc(excluded)}</span>` : ''}</div>`;
 }
 
 function filterBar() {
@@ -73,7 +73,7 @@ function renderResult() {
   out.innerHTML = list.length
     ? `<p class="sc-count-line"><bdi class="num">${list.length}</bdi> سهماً. <b>1+</b> = المفتاح متحقق، <b>0</b> = غير متحقق. اضغط على أي سهم لرؤية سبب كل مفتاح والشارت.</p>
        <div class="table-wrap sc-wrap"><table class="sc-table"><thead><tr>${head.map((h, i) => `<th${i === 0 ? ' class="sc-sticky"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${tableRows(list)}</tbody></table></div>`
-    : `<div class="sc-empty"><strong>لا توجد أسهم تحقق ${filters.minScore} مفاتيح فأكثر الآن.</strong><p>هذا متوقع حين يكون اتجاه السوق (SPUS) غير صاعد، فمفتاح السوق صفر لكل الأسهم ويصبح المطلوب تحقق المفاتيح الخمسة الباقية كلها.</p>${filters.minScore > 4 ? '<p><button type="button" class="sc-btn" data-lower-score>اعرض الأسهم ذات 4 مفاتيح (للاستكشاف)</button></p>' : ''}</div>`;
+    : `<div class="sc-empty"><strong>لا توجد أسهم تحقق ${filters.minScore} مفاتيح فأكثر الآن.</strong><p>هذا متوقع حين يكون اتجاه مؤشر S&P 500 غير صاعد، فمفتاح السوق صفر لكل الأسهم ويصبح المطلوب تحقق المفاتيح الخمسة الباقية كلها.</p>${filters.minScore > 4 ? '<p><button type="button" class="sc-btn" data-lower-score>اعرض الأسهم ذات 4 مفاتيح (للاستكشاف)</button></p>' : ''}</div>`;
 }
 
 /* ---------- بطاقة التفاصيل ---------- */

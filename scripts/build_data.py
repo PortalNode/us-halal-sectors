@@ -29,7 +29,10 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 SPUS_CSV = "https://www.sp-funds.com/wp-content/uploads/data/TidalFG_Holdings_SPUS.csv"
 SCANNER = "https://scanner.tradingview.com/america/scan"
 NY = ZoneInfo("America/New_York")
-INDEX_SYMBOL = "SPUS"
+INDEX_SYMBOL = "SPX"            # المؤشر المرجعي: S&P 500 (رمز الموقع؛ شموعه في ohlc/SPX.json من Cboe)
+INDEX_TV = "SP:SPX"             # رمزه في TradingView
+INDEX_LOGO = "indices/s-and-p-500"
+FIRST_QUARTER_YEAR = 2022       # النتائج الربعية من أول ربع في هذه السنة المالية إلى آخر ربع معلن
 SKIP_TICKERS = {"Cash&Other"}
 
 COLS = [
@@ -140,16 +143,30 @@ def quarter_labels(current, count):
     return labels
 
 
+def fiscal_year_end_month(label, end_epoch):
+    """شهر نهاية السنة المالية من تسمية آخر ربع معلن وتاريخ نهايته: «2027-Q1» تنتهي في سبتمبر ⇒ السنة تنتهي في يونيو."""
+    try:
+        quarter = int(label.split("-Q")[1])
+        month = datetime.fromtimestamp(end_epoch, timezone.utc).month
+    except Exception:
+        return None
+    return (month - 1 + (4 - quarter) * 3) % 12 + 1
+
+
 def quarterly_block(row):
-    """آخر 8 أرباع؛ الربع الأحدث هو fiscal_period_current، والأقدم بالتسلسل."""
+    """كل الأرباع المتاحة من أول FIRST_QUARTER_YEAR؛ الربع الأحدث هو fiscal_period_current، والأقدم بالتسلسل (الأحدث أولًا)."""
     fields = {"revenue": "total_revenue_fq_h", "grossProfit": "gross_profit_fq_h", "ebitda": "ebitda_fq_h",
               "netIncome": "net_income_fq_h", "eps": "earnings_per_share_diluted_fq_h",
               "freeCashFlow": "free_cash_flow_fq_h", "assets": "total_assets_fq_h", "debt": "total_debt_fq_h",
               "capex": "capital_expenditures_unchanged_fq_h"}
-    series = {key: (row.get(field) or [])[:8] for key, field in fields.items()}
+    series = {key: (row.get(field) or []) for key, field in fields.items()}
     count = max((len(v) for v in series.values()), default=0)
     end = row.get("fiscal_period_end_fq")
-    return {"labels": quarter_labels(row.get("fiscal_period_current") or "", count), "latestEnd": end, **series}
+    labels = quarter_labels(row.get("fiscal_period_current") or "", count)
+    keep = sum(1 for label in labels if int(label[:4]) >= FIRST_QUARTER_YEAR)
+    return {"labels": labels[:keep], "latestEnd": end,
+            "fiscalYearEnd": fiscal_year_end_month(row.get("fiscal_period_current") or "", end) if end else None,
+            **{key: v[:keep] for key, v in series.items()}}
 
 
 def main():
@@ -164,7 +181,7 @@ def main():
                    {"left": "type", "operation": "equal", "right": "stock"}],
         "columns": COLS, "range": [0, 700], "options": {"lang": "en"},
     })
-    index_result = scan({"symbols": {"tickers": [f"AMEX:{INDEX_SYMBOL}"]}, "columns": COLS})
+    index_result = scan({"symbols": {"tickers": [INDEX_TV]}, "columns": COLS})
     rows = {}
     for item in result["data"]:
         record = dict(zip(COLS, item["d"]))
@@ -261,7 +278,7 @@ def main():
         financials[ticker]["quarterly"] = quarterly_block(row)
         logo_jobs.append((ticker, row.get("logoid"), force_logos))
 
-    logo_jobs.append((INDEX_SYMBOL, index_row.get("logoid"), force_logos))
+    logo_jobs.append((INDEX_SYMBOL, index_row.get("logoid") or INDEX_LOGO, force_logos))
     os.makedirs(os.path.join(ROOT, "logos"), exist_ok=True)
     with ThreadPoolExecutor(8) as pool:
         logos = dict(pool.map(fetch_logo, logo_jobs))
@@ -280,7 +297,7 @@ def main():
     price_et = datetime.strptime(price_date, "%Y-%m-%d").strftime("%d.%m.%Y")
     data = {
         "asOf": price_date,
-        "financialPeriod": "آخر أربعة أرباع (TTM) بحسب TradingView",
+        "financialPeriod": "آخر أربعة أرباع (TTM) بحسب TradingView؛ النتائج الربعية من 2022",
         "sources": {
             "shariahList": SPUS_CSV,
             "shariahListName": "SP Funds S&P 500 Sharia Industry Exclusions ETF (SPUS)",
@@ -311,7 +328,7 @@ def main():
             "ytd": num(index_row.get("Perf.YTD"), 4), "month3": num(index_row.get("Perf.3M"), 4),
             "month6": num(index_row.get("Perf.6M"), 4), "year1": num(index_row.get("Perf.Y"), 4),
             "performanceDate": price_date, "performanceSource": "TradingView",
-            "indexSymbol": INDEX_SYMBOL, "indexName": "SPUS · صندوق مؤشر S&P 500 الشرعي",
+            "indexSymbol": INDEX_SYMBOL, "indexName": "مؤشر S&P 500", "indexTv": INDEX_TV,
         },
     }
     with open(os.path.join(ROOT, "data.json"), "w", encoding="utf-8") as handle:

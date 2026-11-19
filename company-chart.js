@@ -231,8 +231,8 @@
   // تطبيع البحث العربي كما في الصفحة الرئيسية: بلا تشكيل، والهمزات ألف، والتاء المربوطة هاء، والألف المقصورة ياء
   const norm = value => String(value ?? '').normalize('NFKD').replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase().trim();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  // صندوق SPUS (المتتبع لمؤشر S&P 500 الشرعي) في بحث الشارت كأنه سهم: شموعه في ohlc/SPUS.json وشعاره في logos/SPUS.svg
-  const INDEX_ENTRY = { symbol: 'SPUS', name: 'صندوق SPUS (مؤشر S&P 500 الشرعي)', en: 'SP Funds S&P 500 Sharia ETF', sector: 'المؤشر', page: null };
+  // مؤشر S&P 500 (المرجعي) في بحث الشارت كأنه سهم: شموعه في ohlc/SPX.json (من Cboe، بلا حجم) وشعاره في logos/SPX.svg
+  const INDEX_ENTRY = { symbol: 'SPX', name: 'مؤشر S&P 500', en: 'S&P 500 Index', sector: 'المؤشر', page: null };
   let stockListPromise = null;
   const loadStockList = () => stockListPromise ??= fetch('data.json').then(r => r.json())
     .then(d => [INDEX_ENTRY, ...d.sectors.flatMap(sector => sector.stocks.map(x => ({ symbol: String(x.symbol), name: x.name, en: x.nameEn || '', sector: sector.name, page: 'company.html' })))])

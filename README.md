@@ -9,11 +9,11 @@
 |---|---|
 | قائمة الشركات الشرعية | حيازات صندوق **SPUS** (SP Funds S&P 500 Sharia Industry Exclusions ETF) المتتبع لمؤشر S&P 500 Shariah؛ ملف CSV منشور يوميًا من SP Funds |
 | الأسعار والتقييم والأداء والنتائج المالية | TradingView Scanner (America) |
-| الشموع اليومية (شارت التحليل الفني) | Yahoo Finance (chart API) |
-| النتائج الربعية (آخر 8 أرباع) | TradingView |
+| الشموع اليومية (شارت التحليل الفني) | Yahoo Finance ثم Nasdaq احتياطيًا للأسهم؛ مؤشر S&P 500 من Cboe |
+| النتائج الربعية (من الربع الأول لسنة 2022 إلى آخر ربع معلن، 9 بنود) | TradingView (`financials.json` ← `quarterly`) |
 | نبذة الشركة، تاريخ التأسيس والإدراج | Wikidata، ووصف النشاط من ويكيبيديا (العربية ثم الإنجليزية) |
 | الشعارات | TradingView |
-| المؤشر المرجعي | سعر صندوق SPUS (لا يوجد مؤشر S&P 500 Shariah مجاني بيانات مباشرة) |
+| المؤشر المرجعي | مؤشر **S&P 500** (`SP:SPX` في TradingView، وشموعه `ohlc/SPX.json` من Cboe بلا حجم) |
 
 > هذه المعلومات للاطلاع وليست فتوى. قد تخرج شركة من القائمة أو تدخل عند إعادة موازنة المؤشر؛ تحقق من توافق السهم مع مرجعك الشرعي، وطهّر أي أرباح موزعة حسب ضوابط جهتك.
 
@@ -32,7 +32,7 @@ python3 -m http.server 8000     # ثم افتح http://localhost:8000
 
 ## الملفات
 - `index.html` + `app.js` + `market-movers.js`: الصفحة الرئيسية
-- `company.html` + `company.js` + `company-quote.js`: نتائج الشركات والنبذة وبطاقة السهم
-- `comparison.html` + `comparison-page.js`: مقارنة النتائج السنوية بين شركات القطاع
+- `company.html` + `company.js` + `company-quote.js`: نتائج الشركات والنبذة وبطاقة السهم، وفترات: ربع / 6 أشهر / 9 أشهر / سنوي / أرباع متتالية (`quarterly-periods.mjs`)
+- `comparison.html` + `comparison-page.js`: مقارنة النتائج السنوية والربعية بين شركات القطاع
 - `technical-analysis.html` + `company-chart.js`: الشارت (Lightweight Charts، Apache-2.0)
 - `scripts/`: توليد البيانات (`arabic_names.py` أسماء الشركات والقطاعات بالعربية)

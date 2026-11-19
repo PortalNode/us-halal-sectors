@@ -1,11 +1,6 @@
 // صفحة المقارنة: تقرأ ملفات ‎*-financials.json‎ (سنوي) و‎*-quarterly-financials.json‎ (ربعي) لكل قطاع.
-// المقارنة السنوية للشركات الأمريكية الشرعية: البيانات من data.json وfinancials.json (TradingView).
-const QUARTER_NAMES = { 1:'الأول', 2:'الثاني', 3:'الثالث', 4:'الرابع' };
-const MONTH_NAMES = {};
-const monthRange = () => '';
-const isCalendarYear = () => true;
-const DEFAULT_PERIOD_SPEC = { ratios: [] };
-const sumQuarters = () => null, withMargins = v => v, quarterLabel = id => id;
+// المقارنة للشركات الأمريكية الشرعية: سنوي (financials.json، TradingView) وربعي من 2022: ربع محدد، أرباع متتالية، 6 أشهر، 9 أشهر.
+import { DEFAULT_PERIOD_SPEC, sumQuarters, withMargins, quarterLabel, monthRange, isCalendarYear, MONTH_NAMES, QUARTER_NAMES, companyFromFinancials } from './quarterly-periods.mjs?v=us-q-20261119';
 const DATA_BASE = '';
 const VERSION = 'comparison-v6';
 const MAX_COMPANIES = 8; // ثمانية ألوان متمايزة ومتحقق منها؛ أكثر من ذلك يفقد الرسم وضوحه
@@ -27,7 +22,7 @@ const nf = d => new Intl.NumberFormat('en-US',{minimumFractionDigits:d,maximumFr
 const NF = [nf(0),nf(1),nf(2)];
 
 // الفترات: السنة كاملة، أو ربع بعينه عبر السنوات، أو أرباع متتالية، أو تجميع 6 و9 أشهر من الأرباع المستقلة.
-const PERIOD_OPTIONS = [['fy','سنوي']];
+const PERIOD_OPTIONS = [['fy','سنوي'],['q','ربع محدد'],['seq','أرباع متتالية'],['h1','6 أشهر'],['m9','9 أشهر']];
 const CUMULATIVE = { h1:{ count:2, short:'6M', name:'6 أشهر' }, m9:{ count:3, short:'9M', name:'9 أشهر' } };
 const SEQ_DEFAULT = 8;
 
@@ -336,15 +331,38 @@ async function fetchSector(key){
   });
   // سنوات مالية تنتهي في أشهر مختلفة: نُبقي السنوات التي أعلنتها نصف شركات القطاع على الأقل حتى لا تظهر سنة لشركة واحدة فقط
   const need = Math.ceil(comps.length / 2);
-  return { annual: { companies: comps, years: [...ys].filter(([, n]) => n >= need).map(([y]) => y).sort().slice(-5) }, quarterly: null };
+  // النتائج الربعية بصيغة الصفحات السعودية؛ قطاع لا شركة فيه بنتائج ربعية يبقى سنويًا فقط
+  const qCompanies = sector.stocks.map(stock => companyFromFinancials(stock.symbol, stock.name, FIN.companies[stock.symbol])).filter(Boolean);
+  return { annual: { companies: comps, years: [...ys].filter(([, n]) => n >= need).map(([y]) => y).sort().slice(-5) }, quarterly: qCompanies.length ? { companies: qCompanies } : null };
 }
-// الأعمدة والقيم: سنوي فقط
+// الأعمدة والقيم للفترة المختارة، وهامش الربح يُحسب من المجاميع كما في صفحات السوق السعودي
 function buildIndex(){
   colLabels = new Map();
-  state.period = 'fy';
-  companies = annual.companies;
-  allYears = (annual.years || []).map(String);
-  valueIndex = new Map(companies.map(c => [c.symbol, new Map((c.years||[]).map(r => [String(r.year), r.values||{}]))]));
+  state.period = quarterly ? chosenPeriod : 'fy';
+  if(state.period==='fy'){
+    companies = annual.companies;
+    allYears = (annual.years || []).map(String);
+    valueIndex = new Map(companies.map(c => [c.symbol, new Map((c.years||[]).map(r => [String(r.year), r.values||{}]))]));
+    return;
+  }
+  const byName = new Map(annual.companies.map(c => [c.symbol, c]));
+  companies = quarterly.companies.map(c => ({ ...c, name: byName.get(c.symbol)?.name || c.name }));
+  const keys = [...new Set(quarterly.companies.flatMap(c => Object.values(c.quarters||{}).flatMap(v => Object.keys(v||{}))))];
+  const spec = { metrics: keys.map(key => ({ key })), ratios: DEFAULT_PERIOD_SPEC.ratios };
+  const ids = new Set();
+  valueIndex = new Map(companies.map(c => {
+    const Q = c.quarters || {}, cols = new Map();
+    const quarters = Object.keys(Q).filter(k => hasData(Q[k])).sort();
+    if(isSeq()) for(const k of quarters) cols.set(k, withMargins(Q[k], spec));
+    else for(const y of new Set(quarters.map(k => Number(k.slice(0,4))))){
+      const v = state.period==='q' ? (hasData(Q[`${y}Q${state.quarter}`]) ? withMargins(Q[`${y}Q${state.quarter}`], spec) : null) : sumQuarters(c, y, CUMULATIVE[state.period].count, spec);
+      if(hasData(v)) cols.set(String(y), v);
+    }
+    cols.forEach((_,k) => ids.add(k));
+    return [c.symbol, cols];
+  }));
+  allYears = [...ids].sort();
+  for(const id of allYears) colLabels.set(id, isSeq() ? quarterLabel(id) : state.period==='q' ? `Q${state.quarter} ${id}` : `${CUMULATIVE[state.period].short} ${id}`);
 }
 // يعيد بناء الأعمدة مع إبقاء ما يمكن إبقاؤه من البند والسنوات والشركات
 function applyData(wanted={}){

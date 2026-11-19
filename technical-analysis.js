@@ -1,9 +1,9 @@
 // صفحة «التحليل الفني»: «مفاتيح جودة السهم» وقائمة المراقبة وشارت السهم (company-chart.js) في صفحة واحدة.
-// السهم من ?symbol= في الرابط (أو SPUS لمؤشر السوق المرجعي)؛ وإن لم يوجد أو لم يكن في القائمة يُعرض أكبر سهم قيمة سوقية.
+// السهم من ?symbol= في الرابط (أو SPX لمؤشر S&P 500 المرجعي)؛ وإن لم يوجد أو لم يكن في القائمة يُعرض أكبر سهم قيمة سوقية.
 // الصفحة تُفتح على الشارت، وعلى الماسح أو المراقبة إن جاء الرابط بـ #scanner أو #watch (دون ?symbol=).
 // اختيار سهم آخر يتم من زر البحث داخل الشارت نفسه.
 (() => {
-  const INDEX = { symbol: 'SPUS', name: 'صندوق SPUS (مؤشر S&P 500 الشرعي)' }; // شموعه في ohlc/SPUS.json
+  const INDEX = { symbol: 'SPX', name: 'مؤشر S&P 500' }; // شموعه في ohlc/SPX.json
   const SCANNER_MODULE = './scanner/scanner-ui.mjs?v=sc-us-20261119';
   const TABS = ['chart', 'scanner', 'watch'];
   const status = document.getElementById('ta-status');

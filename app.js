@@ -7,7 +7,7 @@ const columns = [
   ['month6','تغير 6 أشهر','6m'],['year1','تغير سنة','1y']
 ];
 const TZ = 'America/New_York';
-const INDEX_TV = 'AMEX:SPUS';
+const INDEX_TV = 'SP:SPX';
 const numberFormat = new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const integerFormat = new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
 const epsFormat = new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -177,7 +177,7 @@ function paintMarketSummary(){
   const date=displayDate(m.date);
   const daily=marketDailyChange(m);
   const items=[
-    {label:'سعر الصندوق ($)',value:m.value==null?'—':numberFormat.format(m.value)},
+    {label:'قيمة المؤشر',value:m.value==null?'—':numberFormat.format(m.value)},
     {label:'التغيير اليومي',value:daily,trend:m.day},
     {label:'الشركات المرتفعة',value:integerFormat.format(breadth.up),trend:1},
     {label:'الشركات المنخفضة',value:integerFormat.format(breadth.down),trend:-1},
@@ -197,13 +197,13 @@ function paintMarketSummary(){
     const title=item.label.startsWith('الشركات')||item.label==='دون تغيير'?`محسوب من بيانات أسهم الجدول · ${providerLabel(data.priceSource?.provider)} · ${snapshotLabel()}`:`المصدر: ${itemSource} · ${item.percent?'تاريخ بيانات الأداء':'تاريخ المؤشر'}: ${item.percent?m.performanceDate||'غير متاح':date||'غير متاح'}${item.estimated?' · تقدير من أحجام الأسهم المتأخرة ويُستبدل بالقيمة النهائية عند الإغلاق':''}${item.label==='القيمة المتداولة'?' · مجموع قيمة تداول الشركات المعروضة':''}`;
     return `<div class="market-card" title="${escapeHtml(title)}"><span>${item.label}</span><strong class="${cls}">${display}${estimatedMark}</strong></div>`;
   });
-  const indexLogo='<img class="co-logo co-logo-md market-group-logo" src="logos/SPUS.svg" alt="" width="32" height="32" decoding="async" onerror="this.remove()">';
+  const indexLogo='<img class="co-logo co-logo-md market-group-logo" src="logos/SPX.svg" alt="" width="32" height="32" decoding="async" onerror="this.remove()">';
   const group=(label,body,kind)=>`<div class="market-group market-group-${kind}">${kind==='index'?indexLogo:''}<span class="market-group-label">${label}</span><div class="market-group-cards">${body}</div></div>`;
   const breadthBar=`<div class="breadth-bar" aria-hidden="true"><i class="breadth-up" style="flex:${breadth.up}"></i><i class="breadth-flat" style="flex:${breadth.flat}"></i><i class="breadth-down" style="flex:${breadth.down}"></i></div>`;
-  $('market-stats').innerHTML=group('المؤشر المرجعي · SPUS',cards[0]+cards[1],'index')+group('اتساع السوق',breadthBar+cards[2]+cards[4]+cards[3],'breadth')+group('القيمة المتداولة (دولار)',cards[5],'turnover')+group('أداء المؤشر',cards.slice(6).join(''),'performance');
+  $('market-stats').innerHTML=group('المؤشر المرجعي · S&P 500',cards[0]+cards[1],'index')+group('اتساع السوق',breadthBar+cards[2]+cards[4]+cards[3],'breadth')+group('القيمة المتداولة (دولار)',cards[5],'turnover')+group('أداء المؤشر',cards.slice(6).join(''),'performance');
   const checked=checkedLabel(m.updatedAt);
   const label=mode==='close'?'إغلاق الجلسة':mode==='delayed'?'بيانات متأخرة · غير مؤكدة رسميًا':'بيانات المؤشر';
-  $('market-date').textContent=m.date||m.value!=null?`${label} · ${date||(mode==='close'?'آخر إغلاق متاح':'تاريخ غير متاح')} · ${source}${checked?` · آخر فحص ${checked}`:''} · المرجع: صندوق SPUS المتتبع لمؤشر S&P 500 الشرعي`:'بانتظار تحديث المؤشر';
+  $('market-date').textContent=m.date||m.value!=null?`${label} · ${date||(mode==='close'?'آخر إغلاق متاح':'تاريخ غير متاح')} · ${source}${checked?` · آخر فحص ${checked}`:''} · المرجع: مؤشر S&P 500`:'بانتظار تحديث المؤشر';
 }
 function sectorChange(stocks){
   let weighted=0,total=0;
