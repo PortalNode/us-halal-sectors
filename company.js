@@ -175,11 +175,11 @@
     const { labels, step } = periodData(company);
     if (!labels.length) { $('bank-table-wrap').innerHTML = `<p class="financial-status">لا تتوفر نتائج ${state.period === 'q' ? 'ربعية' : 'سنوية'} لهذه الشركة في المصدر.</p>`; return; }
     const order = labels.map((_, i) => i).reverse(); // الأقدم أولًا ثم الأحدث
-    const head = `<tr><th class="annual-label annual-col-label" scope="col">البند</th>${order.map(i => `<th class="annual-col-value" scope="col">${esc(labelOf(labels[i]))}</th><th class="annual-col-change annual-change-heading" scope="col">${state.period === 'q' ? 'عن الربع نفسه' : 'التغير'}</th>`).join('')}</tr>`;
+    const head = `<tr><th class="annual-label annual-col-label" scope="col">البند</th>${order.map((i, k) => `${k === 0 && state.period !== 'q' ? '' : `<th class="annual-col-change annual-change-heading" scope="col">${state.period === 'q' ? 'عن الربع نفسه' : 'التغير'}</th>`}<th class="annual-col-value" scope="col">${esc(labelOf(labels[i]))}</th>`).join('')}</tr>`;
     const rows = METRICS.map(([key, label, kind]) => {
       const s = series(company, key);
       if (s.every(v => v == null)) return '';
-      return `<tr data-metric="${key}"><th class="annual-label" scope="row">${esc(label)}<small>${kind === 'money' ? 'مليون دولار' : kind === 'ps' ? 'دولار للسهم' : 'نسبة مئوية'}</small></th>${order.map(i => `<td class="annual-value">${fmt(s[i], kind)}</td><td class="annual-change">${change(s[i], s[i + step] ?? null, kind)}</td>`).join('')}</tr>`;
+      return `<tr data-metric="${key}"><th class="annual-label" scope="row">${esc(label)}<small>${kind === 'money' ? 'مليون دولار' : kind === 'ps' ? 'دولار للسهم' : 'نسبة مئوية'}</small></th>${order.map((i, k) => `${k === 0 && state.period !== 'q' ? '' : `<td class="annual-change">${change(s[i], s[i + step] ?? null, kind)}</td>`}<td class="annual-value">${fmt(s[i], kind)}</td>`).join('')}</tr>`;
     }).join('');
     $('bank-table-wrap').innerHTML = `<table class="annual-table"><caption class="sr-only">النتائج المالية ${state.period === 'q' ? 'الربعية' : 'السنوية'}</caption><thead>${head}</thead><tbody>${rows}</tbody></table>`;
   }
