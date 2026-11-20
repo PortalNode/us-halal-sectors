@@ -2,4 +2,4 @@
 //   window.LIVE_CONFIG = { workerUrl: 'https://us-halal-live.<حسابك>.workers.dev' };
 // بدون رابط تعمل الصفحات بالأسعار المتأخرة (TradingView ~15 دقيقة).
 // للتجربة دون تعديل الملف: أضف ?live=<الرابط> إلى أي صفحة (يُحفظ في المتصفح)، و?live=off لإلغائه.
-window.LIVE_CONFIG = { workerUrl: '' };
+window.LIVE_CONFIG = { workerUrl: 'https://solitary-heart-0646us-halal-live.aaltaleedi42.workers.dev' };
