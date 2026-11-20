@@ -256,6 +256,16 @@
     try {
       const prices = await fetch('data.json').then(r => r.json());
       stocks = new Map(prices.sectors.flatMap(sector => sector.stocks).map(stock => [String(stock.symbol), stock]));
+      // آخر سعر لحظي محفوظ (إن كان أحدث من لقطة data.json) فلا يظهر سعر أمس أولًا
+      const lq = window.LiveQuotes;
+      if (lq?.enabled) for (const [symbol, q] of lq.loadCache(Date.parse(prices.priceSource?.checkedAt) || 0)) {
+        const stock = stocks.get(symbol);
+        if (!stock) continue;
+        stock.price = q.price;
+        if (Number.isFinite(q.pct)) stock.day = q.pct;
+        stock.priceStatus = q.status === 'Closed' ? 'close' : 'realtime';
+        stock.priceDate = lq.dateOf(q) || stock.priceDate;
+      }
     } catch (error) { console.warn('Price snapshot unavailable:', error); return; }
     paint();
     new MutationObserver(() => { paint(); const box = document.getElementById('company-quote'), anchor = document.getElementById('company-profile'); if (box && anchor && box.previousElementSibling !== anchor) anchor.after(box); }).observe(document.body, { childList: true, subtree: true });

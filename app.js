@@ -420,6 +420,8 @@ async function refreshPrices(){
     priceRefreshError='';
     // فشل المسار المباشر لا يمنع عرض آخر لقطة موثوقة من data.json ولا يغيّرها.
     live.baseIndex=null;
+    // أسعار لحظية محفوظة من الزيارة السابقة (إن كانت أحدث من لقطة data.json) تُعرض فورًا قبل وصول أول رد حي
+    if(LQ()&&!live.cache.size)for(const [symbol,quote]of LiveQuotes.loadCache(timestamp(data.priceSource?.checkedAt)))live.cache.set(symbol,quote);
     const realtimeApplied=applyLiveCache(data);
     if(!LQ()&&snapshotNeedsLiveQuotes(data)){
       try{
@@ -508,6 +510,7 @@ async function liveTick(){
     const symbols=allStocks().map(stock=>stock.symbol).sort();
     const quotes=await lq.quotes([...symbols,'SPY']);
     for(const [symbol,quote]of quotes)live.cache.set(symbol,quote);
+    if(quotes.size>20&&Date.now()-(live.saved||0)>5000){live.saved=Date.now();lq.saveCache(live.cache);}
     if(quotes.size&&applyLiveCache(data))paintLive();else paintPriceStatus();
   }finally{live.running=false;}
 }

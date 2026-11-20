@@ -55,7 +55,22 @@
   // "Nov 20, 2026 11:02 AM ET" → "2026-11-20"
   const dateOf = quote => { const m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(quote?.time || ''); return m ? `${m[3]}-${MONTHS[m[1]]}-${m[2].padStart(2, '0')}` : null; };
 
+  // آخر أسعار لحظية محفوظة في المتصفح: تُعرض فور فتح الصفحة بدل لقطة data.json القديمة، ثم يحدّثها أول رد حي.
+  const CACHE_KEY = 'us-halal-live-cache';
+  const saveCache = quotes => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), quotes: Object.fromEntries(quotes) })); } catch { /* storage full/unavailable */ }
+  };
+  // newerThan: وقت (ms) — لا تُستخدم الأسعار المحفوظة إلا إن كانت أحدث منه (أحدث من لقطة data.json)
+  const loadCache = (newerThan = 0) => {
+    try {
+      const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (c?.quotes && c.t > newerThan && Date.now() - c.t < 18 * 3600e3) return new Map(Object.entries(c.quotes));
+    } catch { /* ignore */ }
+    return new Map();
+  };
+
   window.LiveQuotes = {
+    saveCache, loadCache,
     enabled: !!url, url, quotes, session, isExtendedHours, dateOf,
     get status() { return { ...state }; },
     onStatus(fn) { listeners.add(fn); return () => listeners.delete(fn); }
