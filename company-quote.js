@@ -208,7 +208,7 @@
 
   function card(stock) {
     return `
-      <div class="cq-head"><h3 id="cq-title">${UNIT}</h3><div class="cp-tags"><span class="cp-tag" id="cq-tag">${esc(tagText(stock))}</span></div></div>
+      <div class="cq-head"><h3 id="cq-title">${UNIT}</h3><div class="cp-tags"><span class="cp-tag" id="cq-tag">${esc(tagText(stock))}</span><span class="pf-trade-btns"><button type="button" class="pf-trade-btn buy" data-pf-trade="buy" data-pf-symbol="${esc(stock.symbol)}">شراء افتراضي</button><button type="button" class="pf-trade-btn sell" data-pf-trade="sell" data-pf-symbol="${esc(stock.symbol)}">بيع</button></span></div></div>
       <div class="cq-body">
         <div class="cq-figures">${figures(stock)}</div>
         <div class="cq-mini-slot"><p class="cq-empty cq-mini-empty">جار تحميل الشارت…</p></div>

@@ -414,6 +414,7 @@
           ${dividends.length ? `<div class="cq-range" role="group" aria-label="التوزيعات">${chip('adj', '1', 'ADJ', state.adj, 'تعديل الأسعار للتوزيعات النقدية، كما في زر ADJ في TradingView')}${chip('divmarks', '1', 'علامات D', state.divMarks, 'إظهار علامة D على شمعة استحقاق كل توزيع نقدي أو إخفاؤها')}</div>` : ''}
         </div>
         <div class="cc-end">
+          <span class="pf-trade-btns" data-pf-btns hidden title="تداول افتراضي بمحفظتك"><button type="button" class="pf-trade-btn buy" data-pf-trade="buy" data-pf-symbol="${esc(symbol)}">شراء</button><button type="button" class="pf-trade-btn sell" data-pf-trade="sell" data-pf-symbol="${esc(symbol)}">بيع</button></span>
           <span class="cq-range-change cc-change"></span>
           <button type="button" class="cc-full-btn" data-full aria-pressed="false" title="تكبير الرسم البياني ليملأ الشاشة (F)">${ICON_FULL}<span>ملء الشاشة</span></button>
         </div>
@@ -467,7 +468,7 @@
       tick();
     }
     const ilegend = panel.querySelector('.cc-ilegend'), stage = panel.querySelector('.cc-stage'), dlg = panel.querySelector('.cc-dlg');
-    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null, volSeries = null, lastBuildAt = 0, liveTimer = null, liveBusy = false;
+    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null, volSeries = null, lastBuildAt = 0, liveTimer = null, liveBusy = false, avgLine = null;
     // المؤشرات على الشارت: المؤشر المحدد، ولوحة كل مؤشر، وخطوطه (لتحديده بالضغط عليه)
     let selInd = null, paneIds = [null], indLines = [], selPrims = [];
     // تحرير الرسوم: الرسمة المحددة، والسحب الجاري، ونقطة المغناطيس تحت المؤشر قبل الضغطة الأولى
@@ -898,6 +899,7 @@
         ? chart.addSeries(LWC.CandlestickSeries, { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: colors.muted })
         : chart.addSeries(LWC.AreaSeries, { lineColor: colors.gold, topColor: colors.gold + '55', bottomColor: colors.gold + '00', lineWidth: 2, priceLineColor: colors.muted });
       main.setData(state.type === 'candles' ? data.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })) : data.map(b => ({ time: b.time, value: b.close })));
+      avgLine = null; drawAvg();
       indLines = []; selPrims = []; volSeries = null; lastBuildAt = Date.now();
       if (shownInd('vol')) {
         const s = indCfg.vol, upC = plotColor('vol', 'up'), downC = plotColor('vol', 'down');
@@ -1758,6 +1760,17 @@
     });
 
 
+    // ---- المحفظة الافتراضية: خط متوسط شرائك على الشارت + أزرار الشراء والبيع (للأسهم المتاحة فقط)
+    function drawAvg() {
+      if (!main) return;
+      try { if (avgLine) { main.removePriceLine(avgLine); avgLine = null; } } catch { avgLine = null; }
+      const h = window.Portfolio?.holding?.(symbol);
+      if (h?.avg > 0) avgLine = main.createPriceLine({ price: h.avg, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `متوسط شرائك · ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(h.shares)} سهم` });
+    }
+    const onPortfolio = () => drawAvg();
+    window.addEventListener('portfolio:change', onPortfolio);
+    window.Portfolio?.canTrade(String(symbol)).then(ok => { const b = panel.querySelector('[data-pf-btns]'); if (ok && b) b.hidden = false; });
+
     // ---- شمعة لحظية: آخر شمعة تتحرك مع سعر Nasdaq الحي (LiveQuotes / worker). تُعاد حسابات المؤشرات كل 30 ثانية أو عند شمعة جديدة.
     function applyLive(s) {
       if (!chart || !main || !raw.length || !(s?.close > 0) || !s.date) return;
@@ -1798,7 +1811,7 @@
       tick(); loop();
     }
     const theme = new MutationObserver(() => { if (!chart) return; colors = palette(panel); build(true); });
-    current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); clearTimeout(liveTimer); chart?.remove(); chart = null; } };
+    current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); clearTimeout(liveTimer); window.removeEventListener('portfolio:change', onPortfolio); chart?.remove(); chart = null; } };
     const firstLive = window.LiveQuotes?.enabled && window.LiveQuotes.isExtendedHours() ? window.LiveQuotes.session(symbol) : null; // يبدأ مع تحميل المكتبة
     loadLib().then(async lib => {
       LWC = lib; colors = palette(panel);
