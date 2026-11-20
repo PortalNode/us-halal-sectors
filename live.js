@@ -18,7 +18,7 @@
     for (const fn of listeners) try { fn({ ...state }); } catch { /* ignore */ }
   };
 
-  async function get(path, ms = 8000) {
+  async function get(path, ms = 15000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
     try {
@@ -33,11 +33,11 @@
     } finally { clearTimeout(timer); }
   }
 
-  // رموز كثيرة: دفعات من 40 بالتوازي. يعيد Map(رمز → عرض سعر)
+  // رموز كثيرة: دفعات من 100. يعيد Map(رمز → عرض سعر)
   async function quotes(symbols) {
     const list = [...new Set(symbols.filter(Boolean))], out = new Map();
     const chunks = [];
-    for (let i = 0; i < list.length; i += 40) chunks.push(list.slice(i, i + 40));
+    for (let i = 0; i < list.length; i += 100) chunks.push(list.slice(i, i + 100));
     const results = await Promise.all(chunks.map(c => get(`/quotes?symbols=${encodeURIComponent(c.join(','))}`)));
     for (const r of results) for (const [symbol, quote] of Object.entries(r?.quotes || {})) if (quote?.price > 0) out.set(symbol, quote);
     return out;

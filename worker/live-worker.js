@@ -1,7 +1,7 @@
 // وسيط الأسعار اللحظية (Cloudflare Worker): يقرأ أسعار Nasdaq الحية ويضيف CORS ليقرأها المتصفح.
 //
-//   GET /quotes?symbols=AAPL,MSFT,...   (حتى 40 رمزًا في الطلب)
-//       → { asOf, quotes: { AAPL: { price, change, pct, volume, time, status, realtime, bid, ask, low, high } } }
+//   GET /quotes?symbols=AAPL,MSFT,...   (حتى 100 رمز في الطلب؛ SYMBOL:etf لصناديق غير معروفة)
+//       → { asOf, quotes: { AAPL: { price, change, pct, volume, time, status, realtime, prevClose, open } } }
 //   GET /session?symbol=AAPL
 //       → { symbol, date, open, high, low, close, volume, prevClose, status, ticks: [[wallMs, price], ...] }
 //          (شمعة جلسة اليوم من بيانات الصفقات اللحظية، لتحريك آخر شمعة في الشارت)
@@ -15,7 +15,7 @@ const HEADERS = {
   Origin: 'https://www.nasdaq.com',
   Referer: 'https://www.nasdaq.com/'
 };
-const MAX_SYMBOLS = 40;           // الحد الأدنى للطبقة المجانية: 50 طلبًا خارجيًا لكل استدعاء
+const MAX_SYMBOLS = 100;          // 100 رمز = 5 طلبات خارجية فقط (الحد المجاني 50 لكل استدعاء)
 const TTL = 1500;                 // ملّي ثانية: لا نكرر الطلب نفسه إلى ناسداك خلال هذه المدة
 const cache = new Map();
 
@@ -67,12 +67,39 @@ function quoteOf(d) {
 // فنقرأ حقوله بـ UTC مباشرة دون تحويل منطقة زمنية.
 const wall = ms => { const iso = new Date(ms).toISOString(); return { date: iso.slice(0, 10), minutes: +iso.slice(11, 13) * 60 + +iso.slice(14, 16) }; };
 
+// صناديق (ETF) لا تُجلب كأسهم: هذه الرموز تُرسل بفئة etf (ويمكن للعميل كتابة SYMBOL:etf صراحة)
+const ETFS = new Set(['SPY', 'SPUS', 'QQQ', 'VOO', 'IVV', 'DIA', 'IWM', 'HLAL', 'UMMA']);
+const STATUS = s => /pre/i.test(s) ? 'Pre-Market' : /after|post/i.test(s) ? 'After-Hours' : /closed/i.test(s) ? 'Closed' : /open/i.test(s) ? 'Open' : s || null;
+
+// واجهة watchlist عند ناسداك تعيد حتى 20 رمزًا في طلب واحد (أسرع بكثير من طلب لكل رمز)
+async function watchlist(chunk) {
+  const query = chunk.map(([symbol, cls]) => `symbol=${encodeURIComponent(`${symbol.toLowerCase()}|${cls}`)}`).join('&');
+  const rows = await nasdaq(`watchlist?${query}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function quotes(url) {
-  const list = [...new Set((url.searchParams.get('symbols') || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean))];
-  if (!list.length) return json({ error: 'symbols required' }, 400);
-  if (list.length > MAX_SYMBOLS || list.some(s => !SYMBOL.test(s))) return json({ error: `1-${MAX_SYMBOLS} valid symbols` }, 400);
+  const raw = [...new Set((url.searchParams.get('symbols') || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean))];
+  if (!raw.length) return json({ error: 'symbols required' }, 400);
+  const list = raw.map(item => { const [symbol, cls] = item.split(':'); return [symbol, cls === 'ETF' || ETFS.has(symbol) ? 'etf' : 'stocks']; });
+  if (list.length > MAX_SYMBOLS || list.some(([s]) => !SYMBOL.test(s))) return json({ error: `1-${MAX_SYMBOLS} valid symbols` }, 400);
+  const chunks = [];
+  for (let i = 0; i < list.length; i += 20) chunks.push(list.slice(i, i + 20));
   const out = {};
-  await Promise.all(list.map(async s => { const d = await info(s); if (d) out[s] = quoteOf(d); }));
+  await Promise.all(chunks.map(async chunk => {
+    let rows = [];
+    try { rows = await watchlist(chunk); } catch { /* هذه الدفعة فقط */ }
+    for (const r of rows) {
+      const price = money(r.lastSalePrice);
+      if (!(price > 0)) continue;
+      out[String(r.symbol).toUpperCase()] = {
+        price, change: money(r.netChange), pct: money(r.percentageChange), volume: money(r.volume),
+        time: r.lastTradeTimestamp || null, realtime: true, status: STATUS(r.marketStatus),
+        prevClose: Number.isFinite(r.previousClosePrice) ? r.previousClosePrice : money(r.previousClosePrice),
+        open: Number.isFinite(r.openingPrice) ? r.openingPrice : money(r.openingPrice)
+      };
+    }
+  }));
   return json({ asOf: Date.now(), quotes: out });
 }
 

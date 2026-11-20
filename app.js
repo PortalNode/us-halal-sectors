@@ -447,7 +447,7 @@ async function refreshPrices(){
 
 /*
  * أسعار لحظية (Nasdaq Last Sale عبر وسيط Cloudflare Worker — انظر worker/README.md).
- * تُجلب الأسهم بالتناوب (40 سهمًا كل دورة) مع أسهم العرض الحالي، فيكتمل الجدول كله خلال ثوانٍ.
+ * تُجلب كل الأسهم كل 3 ثوانٍ (دفعات من 100 رمز إلى الوسيط، وهو يجلبها من ناسداك 20 رمزًا في الطلب).
  * عند تعطل الوسيط يبقى العرض على data.json وأسعار TradingView المتأخرة كما كان.
  */
 const live={cache:new Map(),cursor:0,running:false,timer:null,baseIndex:null};
@@ -504,14 +504,9 @@ async function liveTick(){
   if(!lq||!data||live.running||document.hidden)return;
   live.running=true;
   try{
-    const symbols=allStocks().map(stock=>stock.symbol);
-    const chunk=[];
-    for(let n=0;n<40&&n<symbols.length;n++)chunk.push(symbols[(live.cursor+n)%symbols.length]);
-    live.cursor=(live.cursor+40)%Math.max(symbols.length,1);
-    // أسهم العرض الحالي (قطاع/مجموعة/مفضلة) تتحدث كل دورة
-    const shown=[...document.querySelectorAll('#sectors tbody .symbol-badge')].map(node=>node.textContent.trim());
-    if(shown.length<=80)chunk.push(...shown);
-    const quotes=await lq.quotes([...chunk,'SPY']);
+    // كل الأسهم في كل دورة: الوسيط يجلبها بدفعات من 20 سهمًا في طلب واحد لدى ناسداك
+    const symbols=allStocks().map(stock=>stock.symbol).sort();
+    const quotes=await lq.quotes([...symbols,'SPY']);
     for(const [symbol,quote]of quotes)live.cache.set(symbol,quote);
     if(quotes.size&&applyLiveCache(data))paintLive();else paintPriceStatus();
   }finally{live.running=false;}
@@ -520,7 +515,7 @@ function scheduleLive(){
   clearTimeout(live.timer);
   const lq=LQ();
   if(!lq)return;
-  live.timer=setTimeout(async()=>{await liveTick();scheduleLive();},lq.isExtendedHours()?2000:60000);
+  live.timer=setTimeout(async()=>{await liveTick();scheduleLive();},lq.isExtendedHours()?3000:60000);
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&LQ()){liveTick().then(scheduleLive);}});
 
