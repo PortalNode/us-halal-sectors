@@ -179,9 +179,36 @@
     link.addEventListener('pointerleave', () => { hide(); show(n - 1); });
   }
 
+  const tagText = stock => stock.priceStatus === 'realtime' ? `سعر لحظي · ${dotDate(stock.priceDate)} · المصدر: ناسداك (آخر صفقة)`
+    : `${(stock.priceStatus === 'close' || stock.priceStatus === 'official_close') ? 'إغلاق الجلسة' : 'سعر متأخر'} · ${dotDate(stock.priceDate)} · المصدر: تريدينغ فيو`;
+  // سعر لحظي للسهم المعروض (وسيط Nasdaq): يحدّث بطاقة الأرقام دون إعادة رسم الصفحة
+  let liveTimer = null;
+  function startLive(symbol, stock, box) {
+    clearTimeout(liveTimer);
+    const lq = window.LiveQuotes;
+    if (!lq?.enabled) return;
+    const tick = async () => {
+      if (shown !== symbol || !box.isConnected) return;
+      if (!document.hidden) {
+        const q = (await lq.quotes([symbol])).get(symbol);
+        if (q && shown === symbol) {
+          stock.price = q.price;
+          if (Number.isFinite(q.pct)) stock.day = q.pct;
+          stock.priceStatus = q.status === 'Closed' ? 'close' : 'realtime';
+          stock.priceDate = lq.dateOf(q) || stock.priceDate;
+          const figs = box.querySelector('.cq-figures'), tag = box.querySelector('#cq-tag');
+          if (figs) figs.innerHTML = figures(stock);
+          if (tag) tag.textContent = tagText(stock);
+        }
+      }
+      liveTimer = setTimeout(tick, lq.isExtendedHours() ? 2000 : 30000);
+    };
+    tick();
+  }
+
   function card(stock) {
     return `
-      <div class="cq-head"><h3 id="cq-title">${UNIT}</h3><div class="cp-tags"><span class="cp-tag">${(stock.priceStatus === 'close' || stock.priceStatus === 'official_close') ? 'إغلاق الجلسة' : 'سعر متأخر'} · ${esc(dotDate(stock.priceDate))} · المصدر: تريدينغ فيو</span></div></div>
+      <div class="cq-head"><h3 id="cq-title">${UNIT}</h3><div class="cp-tags"><span class="cp-tag" id="cq-tag">${esc(tagText(stock))}</span></div></div>
       <div class="cq-body">
         <div class="cq-figures">${figures(stock)}</div>
         <div class="cq-mini-slot"><p class="cq-empty cq-mini-empty">جار تحميل الشارت…</p></div>
@@ -206,6 +233,7 @@
     if (box.previousElementSibling !== anchor) anchor.after(box);
     shown = symbol;
     box.innerHTML = card(stock);
+    startLive(symbol, stock, box);
     const [ohlc, intraday] = await Promise.all([loadCandles(symbol), loadIntraday(symbol)]), slot = box.querySelector('.cq-mini-slot');
     if (shown !== symbol || !slot) return;
     const render = () => {

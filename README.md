@@ -37,3 +37,6 @@ python3 -m http.server 8000     # ثم افتح http://localhost:8000
 - `comparison.html` + `comparison-page.js`: مقارنة النتائج السنوية والربعية بين شركات القطاع
 - `technical-analysis.html` + `company-chart.js`: الشارت (Lightweight Charts، Apache-2.0)
 - `scripts/`: توليد البيانات (`arabic_names.py` أسماء الشركات والقطاعات بالعربية)
+
+## الأسعار اللحظية
+انظر `worker/README.md`: وسيط Cloudflare Worker مجاني يقرأ أسعار Nasdaq الحية، فتتحدث الأسعار في الجدول وبطاقة السهم وشمعة اليوم في الشارت لحظيًا. بدونه تعمل الصفحات بأسعار TradingView المتأخرة.

@@ -396,7 +396,7 @@
   function mount(panel, file, { home = null, away = {}, keepFull = false, levels = [] } = {}) {
     current?.destroy({ keepFull });
     home ??= { symbol: String(file.symbol), file };
-    const raw = bars(file), symbol = file.symbol, estimated = new Set(file.est || []), dividends = (file.div || []).filter(([d]) => d > raw[0]?.time && d <= raw.at(-1)?.time);
+    let raw = bars(file); const symbol = file.symbol, estimated = new Set(file.est || []), dividends = (file.div || []).filter(([d]) => d > raw[0]?.time && d <= raw.at(-1)?.time);
     let daily = state.adj ? adjustDividends(raw, dividends) : raw;
     let drawings = loadDrawings(symbol), pending = null, pending2 = null; // pending2: القناة المتوازية بعد نقطتيها، تنتظر النقرة الثالثة
     panel.innerHTML = `
@@ -467,7 +467,7 @@
       tick();
     }
     const ilegend = panel.querySelector('.cc-ilegend'), stage = panel.querySelector('.cc-stage'), dlg = panel.querySelector('.cc-dlg');
-    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null;
+    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null, volSeries = null, lastBuildAt = 0, liveTimer = null, liveBusy = false;
     // المؤشرات على الشارت: المؤشر المحدد، ولوحة كل مؤشر، وخطوطه (لتحديده بالضغط عليه)
     let selInd = null, paneIds = [null], indLines = [], selPrims = [];
     // تحرير الرسوم: الرسمة المحددة، والسحب الجاري، ونقطة المغناطيس تحت المؤشر قبل الضغطة الأولى
@@ -898,10 +898,10 @@
         ? chart.addSeries(LWC.CandlestickSeries, { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: colors.muted })
         : chart.addSeries(LWC.AreaSeries, { lineColor: colors.gold, topColor: colors.gold + '55', bottomColor: colors.gold + '00', lineWidth: 2, priceLineColor: colors.muted });
       main.setData(state.type === 'candles' ? data.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })) : data.map(b => ({ time: b.time, value: b.close })));
-      indLines = []; selPrims = [];
+      indLines = []; selPrims = []; volSeries = null; lastBuildAt = Date.now();
       if (shownInd('vol')) {
         const s = indCfg.vol, upC = plotColor('vol', 'up'), downC = plotColor('vol', 'down');
-        const volume = chart.addSeries(LWC.HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false, visible: !s.hidden });
+        const volume = volSeries = chart.addSeries(LWC.HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false, visible: !s.hidden });
         chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
         volume.setData(data.map(b => { const plotKey = b.close >= b.open ? 'up' : 'down'; return s.plots[plotKey].on ? { time: b.time, value: b.volume, color: (plotKey === 'up' ? upC : downC) + '66' } : { time: b.time }; }));
       }
@@ -1757,12 +1757,53 @@
       build(keep);
     });
 
+
+    // ---- شمعة لحظية: آخر شمعة تتحرك مع سعر Nasdaq الحي (LiveQuotes / worker). تُعاد حسابات المؤشرات كل 30 ثانية أو عند شمعة جديدة.
+    function applyLive(s) {
+      if (!chart || !main || !raw.length || !(s?.close > 0) || !s.date) return;
+      const last = raw.at(-1);
+      let added = false;
+      if (s.date === last.time) {
+        last.close = s.close;
+        last.high = Math.max(last.high, s.high ?? s.close, s.close);
+        last.low = Math.min(last.low, s.low ?? s.close, s.close);
+        if (s.volume > 0) last.volume = Math.round(s.volume);
+      } else if (s.date > last.time) {
+        raw = [...raw, { time: s.date, open: s.open ?? last.close, high: Math.max(s.high ?? s.close, s.close), low: Math.min(s.low ?? s.close, s.close), close: s.close, volume: Math.round(s.volume || 0) }];
+        added = true;
+      } else return;
+      const busy = pending || pending2 || state.tool;
+      if (added || (!busy && Date.now() - lastBuildAt > 30000)) { build(true); return; }
+      daily = state.adj ? adjustDividends(raw, dividends) : raw;
+      data = group(daily, state.interval);
+      const b = data.at(-1);
+      if (!b) return;
+      try {
+        main.update(state.type === 'candles' ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close } : { time: b.time, value: b.close });
+        if (volSeries) volSeries.update({ time: b.time, value: b.volume, color: (b.close >= b.open ? plotColor('vol', 'up') : plotColor('vol', 'down')) + '66' });
+      } catch { /* الشارت يُعاد بناؤه */ }
+      const badge = panel.querySelector('.cc-live');
+      if (badge) { badge.hidden = false; badge.title = `آخر سعر ${f2.format(s.close)} · ${s.time || ''}`; }
+    }
+    function startLive() {
+      const lq = window.LiveQuotes;
+      if (!lq?.enabled) return;
+      clock?.insertAdjacentHTML('beforebegin', '<span class="cc-live" hidden style="color:var(--green,#2bb673);font-size:11px;font-weight:700;margin-inline-end:8px">● لحظي</span>');
+      const tick = async () => {
+        if (liveBusy || document.hidden || !panel.isConnected) return;
+        liveBusy = true;
+        try { applyLive(await lq.session(symbol)); } finally { liveBusy = false; }
+      };
+      const loop = () => { liveTimer = setTimeout(async () => { await tick(); if (panel.isConnected) loop(); }, lq.isExtendedHours() ? 1500 : 30000); };
+      tick(); loop();
+    }
     const theme = new MutationObserver(() => { if (!chart) return; colors = palette(panel); build(true); });
-    current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); chart?.remove(); chart = null; } };
+    current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); clearTimeout(liveTimer); chart?.remove(); chart = null; } };
     loadLib().then(lib => {
       LWC = lib; colors = palette(panel);
       setTool(null);
       build(false);
+      startLive();
       if (keepFull) setFull(true);
       try { if (sessionStorage.getItem('cc-full')) { sessionStorage.removeItem('cc-full'); setFull(true); } } catch { /* ignore */ }
       theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

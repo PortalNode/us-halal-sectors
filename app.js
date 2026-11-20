@@ -87,6 +87,7 @@ function range52(stock){
 }
 
 const sourceLabel = {
+  'Nasdaq':'ناسداك (آخر صفقة لحظية)',
   'TradingView':'تريدينغ فيو','SP Funds':'إس بي فندز','Yahoo Finance':'Yahoo Finance'
 };
 const displayDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? value.split('-').reverse().join('.') : /^\d{2}\.\d{2}\.\d{4}$/.test(value||'') ? value : null;
@@ -112,6 +113,11 @@ function paintPriceStatus(){
   const checked=checkedLabel(source.checkedAt);
   messages.push(checked?`آخر فحص لنسخة الأسعار: ${checked}.`:'وقت آخر فحص لنسخة الأسعار غير متاح.');
   if(isMarketHours() && Number.isFinite(timestamp(source.checkedAt)) && Date.now()-timestamp(source.checkedAt)>35*60*1000)messages.push('نسخة الأسعار قديمة: مضى أكثر من 35 دقيقة على آخر فحص خلال ساعات التداول المعتادة.');
+  if(globalThis.LiveQuotes?.enabled){
+    const st=LiveQuotes.status;
+    if(st.ok===false)messages.push(`تعذر الاتصال بوسيط الأسعار اللحظية (${st.error})؛ تُعرض أسعار متأخرة.`);
+    else if(data?.priceSource?.mode==='realtime')messages.push(`أسعار لحظية من Nasdaq (Last Sale: صفقات ناسداك الحية، قد تختلف قليلًا عن السعر المجمّع)؛ آخر تحديث ${new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(st.at||Date.now()))} بتوقيت نيويورك.`);
+  }
   if(priceRefreshError)messages.push(priceRefreshError);
   const node=$('price-status');if(node)node.textContent=messages.join(' ');
 }
@@ -122,9 +128,9 @@ function paintSnapshot(){
     if(node) node.textContent=date;
   }
   const mode=$('price-mode');
-  const closed=data.priceSource?.mode==='close';
+  const closed=data.priceSource?.mode==='close', realtime=data.priceSource?.mode==='realtime';
   const delay=safeNumber(data.priceSource?.delayMinutes);
-  if(mode)mode.textContent=closed?(date==='—'?'إغلاق الجلسة · آخر إغلاق متاح':'إغلاق الجلسة'):`أسعار متأخرة · غير مؤكدة رسميًا${delay!=null&&delay>0?` · تأخير المصدر ${delay} دقيقة`:''}`;
+  if(mode)mode.textContent=realtime?`أسعار لحظية${statusSuffix()}`:closed?(date==='—'?'إغلاق الجلسة · آخر إغلاق متاح':'إغلاق الجلسة'):`أسعار متأخرة · غير مؤكدة رسميًا${delay!=null&&delay>0?` · تأخير المصدر ${delay} دقيقة`:''}`;
   const source=$('price-source');
   if(source)source.textContent=providerLabel(data.priceSource?.provider);
   paintPriceStatus();
@@ -136,9 +142,11 @@ function paintShariahNote(){
   const date=displayDate(info.holdingsDate);
   node.textContent=`قائمة الشركات الشرعية مأخوذة من حيازات صندوق ${info.source} (${info.sourceName}) المتتبع لمؤشر ${info.indexName}${date?` بتاريخ ${date}`:''}؛ ${info.listedCount} شركة معروضة من ${info.holdingsCount} حيازة. تُطبَّق على المؤشر ضوابط استبعاد الأنشطة المحرمة ونسب الديون والنقد والفوائد وفق معايير مقدّم المؤشر، ويُعاد فحصها دوريًا فقد تخرج شركة أو تدخل. هذه المعلومات للاطلاع وليست فتوى؛ تحقق من توافق السهم مع مرجعك الشرعي قبل الاستثمار، وتذكّر تطهير أي أرباح موزعة وفق ضوابط جهتك.`;
 }
+const MARKET_STATUS={Open:'الجلسة مفتوحة','Pre-Market':'ما قبل الافتتاح','After-Hours':'ما بعد الإغلاق',Closed:'مغلق'};
+const statusSuffix=()=>data?.marketStatus?` · ${MARKET_STATUS[data.marketStatus]||data.marketStatus}`:'';
 function stockPriceLabel(stock){
   const date=displayDate(stock.priceDate);
-  const status=stock.priceStatus==='close'||stock.priceStatus==='official_close'?'إغلاق الجلسة':stock.priceStatus==='unavailable'||stock.price==null?'السعر غير متاح':'سعر متأخر · غير مؤكد رسميًا';
+  const status=stock.priceStatus==='realtime'?'سعر لحظي (Nasdaq Last Sale)':stock.priceStatus==='close'||stock.priceStatus==='official_close'?'إغلاق الجلسة':stock.priceStatus==='unavailable'||stock.price==null?'السعر غير متاح':'سعر متأخر · غير مؤكد رسميًا';
   return `${status} · ${date||'تاريخ السعر غير متاح'} · المصدر: ${providerLabel(stock.priceSource || data.priceSource?.provider)}`;
 }
 function applyFinancials(){
@@ -202,7 +210,7 @@ function paintMarketSummary(){
   const breadthBar=`<div class="breadth-bar" aria-hidden="true"><i class="breadth-up" style="flex:${breadth.up}"></i><i class="breadth-flat" style="flex:${breadth.flat}"></i><i class="breadth-down" style="flex:${breadth.down}"></i></div>`;
   $('market-stats').innerHTML=group('المؤشر المرجعي · S&P 500',cards[0]+cards[1],'index')+group('اتساع السوق',breadthBar+cards[2]+cards[4]+cards[3],'breadth')+group('القيمة المتداولة (دولار)',cards[5],'turnover')+group('أداء المؤشر',cards.slice(6).join(''),'performance');
   const checked=checkedLabel(m.updatedAt);
-  const label=mode==='close'?'إغلاق الجلسة':mode==='delayed'?'بيانات متأخرة · غير مؤكدة رسميًا':'بيانات المؤشر';
+  const label=mode==='realtime'?'أسعار لحظية':mode==='close'?'إغلاق الجلسة':mode==='delayed'?'بيانات متأخرة · غير مؤكدة رسميًا':'بيانات المؤشر';
   $('market-date').textContent=m.date||m.value!=null?`${label} · ${date||(mode==='close'?'آخر إغلاق متاح':'تاريخ غير متاح')} · ${source}${checked?` · آخر فحص ${checked}`:''} · المرجع: مؤشر S&P 500`:'بانتظار تحديث المؤشر';
 }
 function sectorChange(stocks){
@@ -411,7 +419,9 @@ async function refreshPrices(){
     data=result;
     priceRefreshError='';
     // فشل المسار المباشر لا يمنع عرض آخر لقطة موثوقة من data.json ولا يغيّرها.
-    if(snapshotNeedsLiveQuotes(data)){
+    live.baseIndex=null;
+    const realtimeApplied=applyLiveCache(data);
+    if(!LQ()&&snapshotNeedsLiveQuotes(data)){
       try{
         const liveUpdated=await applyTradingViewLivePrices(data);
         // خارج الجلسة غياب سعر أحدث أمر طبيعي (عطلة نهاية الأسبوع أو عطلة رسمية).
@@ -434,6 +444,86 @@ async function refreshPrices(){
   }finally{pricesRefreshRunning=false;}
 }
 
+
+/*
+ * أسعار لحظية (Nasdaq Last Sale عبر وسيط Cloudflare Worker — انظر worker/README.md).
+ * تُجلب الأسهم بالتناوب (40 سهمًا كل دورة) مع أسهم العرض الحالي، فيكتمل الجدول كله خلال ثوانٍ.
+ * عند تعطل الوسيط يبقى العرض على data.json وأسعار TradingView المتأخرة كما كان.
+ */
+const live={cache:new Map(),cursor:0,running:false,timer:null,baseIndex:null};
+const LQ=()=>globalThis.LiveQuotes?.enabled?globalThis.LiveQuotes:null;
+function applyLiveCache(snapshot){
+  if(!snapshot?.sectors||!live.cache.size)return false;
+  let changed=0,turnover=0,turnoverStocks=0,date=null,status=null;
+  const stocks=snapshot.sectors.flatMap(sector=>sector.stocks);
+  for(const stock of stocks){
+    const quote=live.cache.get(stock.symbol);
+    if(!quote)continue;
+    stock.price=quote.price;
+    if(Number.isFinite(quote.pct))stock.day=quote.pct;
+    if(Number.isFinite(stock.shares)&&stock.shares>0)stock.marketCap=quote.price*stock.shares/1e9;
+    if(Number.isFinite(quote.volume)&&quote.volume>0){stock.volume=Math.round(quote.volume);stock.tradedValue=quote.volume*quote.price;}
+    date=LiveQuotes.dateOf(quote)||date;status=quote.status||status;
+    stock.priceDate=LiveQuotes.dateOf(quote)||stock.priceDate;
+    stock.priceCheckedAt=new Date().toISOString();
+    stock.priceSource='Nasdaq';
+    stock.priceStatus=quote.status==='Closed'?'close':'realtime';
+    stock._livePrice=true;
+    changed++;
+  }
+  for(const stock of stocks){if(stock.tradedValue>0){turnover+=stock.tradedValue;turnoverStocks++;}}
+  if(!changed)return false;
+  const mode=status==='Closed'?'close':'realtime',checkedAt=new Date().toISOString();
+  snapshot.marketStatus=status;
+  snapshot.priceSource={...snapshot.priceSource,provider:'Nasdaq',mode,observedDate:date||snapshot.priceSource?.observedDate,checkedAt,delayMinutes:null,live:true,liveSymbols:changed,warning:null};
+  if(date){snapshot.priceDate=displayDate(date);snapshot.asOf=date;}
+  const spy=live.cache.get('SPY');
+  if(spy&&Number.isFinite(spy.pct)){
+    // ناسداك لا يعطي مؤشر S&P 500 نفسه: نقدّره من حركة صندوق SPY على إغلاق اليوم السابق.
+    const m=snapshot.marketSummary||{};
+    if(!live.baseIndex&&Number.isFinite(m.value)){
+      const snapDate=m.performanceDate||snapshot.asOf,spyDate=LiveQuotes.dateOf(spy);
+      live.baseIndex=spyDate&&snapDate&&spyDate>snapDate?m.value:m.value/(1+(m.day||0)/100);
+    }
+    if(live.baseIndex){
+      const value=live.baseIndex*(1+spy.pct/100);
+      snapshot.marketSummary={...m,value,pointChange:value-live.baseIndex,day:spy.pct,date:displayDate(date)||m.date,source:'Nasdaq',mode,isIntraday:mode==='realtime',updatedAt:checkedAt,indexEstimated:true};
+    }
+  }
+  snapshot.marketSummary={...snapshot.marketSummary,turnover,turnoverSource:'Nasdaq',turnoverEstimated:true,turnoverStocks,turnoverUpdatedAt:checkedAt};
+  return true;
+}
+function paintLive(){
+  paintSnapshot();paintMarketSummary();globalThis.MarketMovers?.paint(data);
+  const scrolls=[...document.querySelectorAll('.table-wrap')].map(wrap=>wrap.scrollLeft);
+  applyFinancials();
+  document.querySelectorAll('.table-wrap').forEach((wrap,i)=>{if(scrolls[i])wrap.scrollLeft=scrolls[i];});
+}
+async function liveTick(){
+  const lq=LQ();
+  if(!lq||!data||live.running||document.hidden)return;
+  live.running=true;
+  try{
+    const symbols=allStocks().map(stock=>stock.symbol);
+    const chunk=[];
+    for(let n=0;n<40&&n<symbols.length;n++)chunk.push(symbols[(live.cursor+n)%symbols.length]);
+    live.cursor=(live.cursor+40)%Math.max(symbols.length,1);
+    // أسهم العرض الحالي (قطاع/مجموعة/مفضلة) تتحدث كل دورة
+    const shown=[...document.querySelectorAll('#sectors tbody .symbol-badge')].map(node=>node.textContent.trim());
+    if(shown.length<=80)chunk.push(...shown);
+    const quotes=await lq.quotes([...chunk,'SPY']);
+    for(const [symbol,quote]of quotes)live.cache.set(symbol,quote);
+    if(quotes.size&&applyLiveCache(data))paintLive();else paintPriceStatus();
+  }finally{live.running=false;}
+}
+function scheduleLive(){
+  clearTimeout(live.timer);
+  const lq=LQ();
+  if(!lq)return;
+  live.timer=setTimeout(async()=>{await liveTick();scheduleLive();},lq.isExtendedHours()?2000:60000);
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&LQ()){liveTick().then(scheduleLive);}});
+
 document.addEventListener('click',event=>{
   const favButton=event.target.closest('[data-fav]');
   if(favButton){event.preventDefault();toggleFavorite(favButton.dataset.fav);return;}
@@ -450,6 +540,6 @@ $('search').addEventListener('input',event=>{query=normalized(event.target.value
 $('clear').addEventListener('click',()=>{$('search').value='';query='';render();$('search').focus();});
 $('recurring-mode').addEventListener('click',()=>updateMode('recurring'));
 $('reported-mode').addEventListener('click',()=>updateMode('reported'));
-refreshPrices();
+refreshPrices().then(()=>{if(LQ()){liveTick().then(scheduleLive);}});
 setInterval(refreshPrices,60*1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshPrices();});
