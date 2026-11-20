@@ -182,7 +182,7 @@
   const tagText = stock => stock.priceStatus === 'realtime' ? `سعر لحظي · ${dotDate(stock.priceDate)} · المصدر: ناسداك (آخر صفقة)`
     : `${(stock.priceStatus === 'close' || stock.priceStatus === 'official_close') ? 'إغلاق الجلسة' : 'سعر متأخر'} · ${dotDate(stock.priceDate)} · المصدر: تريدينغ فيو`;
   // سعر لحظي للسهم المعروض (وسيط Nasdaq): يحدّث بطاقة الأرقام دون إعادة رسم الصفحة
-  let liveTimer = null;
+  let liveTimer = null, waiting = null;
   function startLive(symbol, stock, box) {
     clearTimeout(liveTimer);
     const lq = window.LiveQuotes;
@@ -222,6 +222,22 @@
     const stock = stocks.get(symbol);
     let box = document.getElementById('company-quote');
     if (!stock) { box?.remove(); shown = symbol; return; }
+    // أثناء ساعات السوق ننتظر أول سعر لحظي (حتى 3.5 ثانية) بدل عرض إغلاق أمس
+    const lq = window.LiveQuotes;
+    if (lq?.enabled && lq.isExtendedHours() && !stock._liveFirst) {
+      if (waiting === symbol) return;
+      waiting = symbol;
+      const q = (await Promise.race([lq.quotes([symbol]), new Promise(resolve => setTimeout(() => resolve(null), 3500))]))?.get(symbol);
+      waiting = null;
+      stock._liveFirst = true;
+      if (q) {
+        stock.price = q.price;
+        if (Number.isFinite(q.pct)) stock.day = q.pct;
+        stock.priceStatus = q.status === 'Closed' ? 'close' : 'realtime';
+        stock.priceDate = lq.dateOf(q) || stock.priceDate;
+      }
+      if (document.querySelector('.bank-heading .symbol-badge')?.textContent.trim() !== symbol) return;
+    }
     const anchor = document.getElementById('company-profile') || heading;
     if (!box) {
       box = document.createElement('section');

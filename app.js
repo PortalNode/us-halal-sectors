@@ -422,6 +422,12 @@ async function refreshPrices(){
     live.baseIndex=null;
     // أسعار لحظية محفوظة من الزيارة السابقة (إن كانت أحدث من لقطة data.json) تُعرض فورًا قبل وصول أول رد حي
     if(LQ()&&!live.cache.size)for(const [symbol,quote]of LiveQuotes.loadCache(timestamp(data.priceSource?.checkedAt)))live.cache.set(symbol,quote);
+    // أول رسم أثناء ساعات السوق: ننتظر أول رد لحظي (حتى 4.5 ثانية) بدل عرض أسعار أمس ثم استبدالها
+    if(initial&&LQ()&&LiveQuotes.isExtendedHours()){
+      $('result-count').textContent='جار جلب الأسعار اللحظية…';
+      const first=await Promise.race([LQ().quotes([...allStocks().map(stock=>stock.symbol).sort(),'SPY']),new Promise(resolve=>setTimeout(()=>resolve(null),4500))]);
+      if(first)for(const [symbol,quote]of first)live.cache.set(symbol,quote);
+    }
     const realtimeApplied=applyLiveCache(data);
     if(!LQ()&&snapshotNeedsLiveQuotes(data)){
       try{

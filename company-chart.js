@@ -1799,8 +1799,19 @@
     }
     const theme = new MutationObserver(() => { if (!chart) return; colors = palette(panel); build(true); });
     current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); clearTimeout(liveTimer); chart?.remove(); chart = null; } };
-    loadLib().then(lib => {
+    const firstLive = window.LiveQuotes?.enabled && window.LiveQuotes.isExtendedHours() ? window.LiveQuotes.session(symbol) : null; // يبدأ مع تحميل المكتبة
+    loadLib().then(async lib => {
       LWC = lib; colors = palette(panel);
+      // أثناء ساعات السوق: شمعة اليوم تدخل أول رسم (ننتظر أول رد حتى 6 ثوانٍ) فلا تظهر آخر شمعة أمس ثم تتغير
+      if (firstLive) {
+        const s = await Promise.race([firstLive, new Promise(resolve => setTimeout(() => resolve(null), 6000))]);
+        const last = raw.at(-1);
+        if (!panel.isConnected) return;
+        if (s?.close > 0 && s.date && last) {
+          if (s.date === last.time) { last.close = s.close; last.high = Math.max(last.high, s.high ?? s.close, s.close); last.low = Math.min(last.low, s.low ?? s.close, s.close); if (s.volume > 0) last.volume = Math.round(s.volume); }
+          else if (s.date > last.time) raw = [...raw, { time: s.date, open: s.open ?? last.close, high: Math.max(s.high ?? s.close, s.close), low: Math.min(s.low ?? s.close, s.close), close: s.close, volume: Math.round(s.volume || 0) }];
+        }
+      }
       setTool(null);
       build(false);
       startLive();

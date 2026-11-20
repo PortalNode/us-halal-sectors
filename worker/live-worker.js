@@ -106,12 +106,14 @@ async function quotes(url) {
 async function session(url) {
   const symbol = (url.searchParams.get('symbol') || '').toUpperCase();
   if (!SYMBOL.test(symbol)) return json({ error: 'valid symbol required' }, 400);
-  const d = await info(symbol);
+  // السعر والصفقات بالتوازي (نصف الزمن): الفئة تُخمَّن من الرمز ثم تُصحَّح إن لزم
+  const guess = ETFS.has(symbol) ? 'etf' : 'stocks';
+  const [d, chart] = await Promise.all([info(symbol), nasdaq(`${symbol}/chart?assetclass=${guess}`).catch(() => null)]);
   if (!d) return json({ error: 'not found' }, 404);
   const q = quoteOf(d), cls = d.assetClass === 'ETF' ? 'etf' : 'stocks';
   let ticks = [], prevClose = null;
   try {
-    const c = await nasdaq(`${symbol}/chart?assetclass=${cls}`);
+    const c = chart && cls === guess ? chart : await nasdaq(`${symbol}/chart?assetclass=${cls}`);
     ticks = (c.chart || []).map(t => [t.x, t.y]).filter(t => Number.isFinite(t[0]) && Number.isFinite(t[1]));
     prevClose = money(c.previousClose);
   } catch { /* نكتفي بسعر info */ }
