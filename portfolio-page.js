@@ -65,7 +65,8 @@
   // ---------- الحساب ----------
   async function compute() {
     const state = P.load(), now = P.replay(state);
-    const symbols = [...new Set(state.trades.map(t => t.symbol))];
+    const orders = P.openOrders(state), reserved = P.availability(state, '').reservedCash;
+    const symbols = [...new Set([...state.trades.map(t => t.symbol), ...orders.map(o => o.symbol)])];
     let [bench] = await Promise.all([loadCandles(BENCH, state.startDate), ...symbols.map(s => loadCandles(s, state.startDate))]);
     // إن تأخر ملف شموع المؤشر عن آخر إغلاق، نكمله من إغلاق المؤشر في data.json (عندما يكون إغلاقًا نهائيًا)
     const m = S.snap?.marketSummary, md = m?.performanceDate || S.snap?.asOf;
@@ -127,7 +128,7 @@
     const prevEq = points.length > 1 ? points.at(-2).equity : state.startCash;
     const benchEnd = first ? points.at(-1).bench : null; // null إن تأخر إغلاق المؤشر لآخر يوم
     return {
-      state, now, holdings: holdingsNow, equityNow, valueNow, points, rows, maxDd, best, worst,
+      state, now, orders, reserved: { cash: reserved }, holdings: holdingsNow, equityNow, valueNow, points, rows, maxDd, best, worst,
       totalPL: equityNow - state.startCash, totalPct: (equityNow / state.startCash - 1) * 100,
       dayPL: equityNow - prevEq, dayPct: prevEq ? (equityNow / prevEq - 1) * 100 : 0,
       unrealized: valueNow - costNow, benchPct: benchEnd ? (benchEnd / state.startCash - 1) * 100 : null
@@ -170,13 +171,14 @@
         <div class="pf-card"><span>أداء اليوم</span><b class="${cls(c.dayPL)}">${signed(c.dayPL)}</b><small class="${cls(c.dayPL)}">${pct(c.dayPct)}</small></div>
         <div class="pf-card"><span>العائد الكلي</span><b class="${cls(c.totalPL)}">${signed(c.totalPL)}</b><small class="${cls(c.totalPL)}">${pct(c.totalPct)}</small></div>
         <div class="pf-card"><span>مقابل S&amp;P 500</span><b class="${cls(c.benchPct == null ? 0 : c.totalPct - c.benchPct)}">${c.benchPct == null ? '—' : `${c.totalPct - c.benchPct > 0 ? '+' : ''}${f2.format(c.totalPct - c.benchPct)} ن.م.`}</b><small>المؤشر ${pct(c.benchPct)} · المحفظة ${pct(c.totalPct)}</small></div>
-        <div class="pf-card"><span>النقد المتاح</span><b>${money(c.now.cash)}</b><small>${f2.format(c.equityNow ? c.now.cash / c.equityNow * 100 : 100)}% من المحفظة</small></div>
+        <div class="pf-card"><span>النقد المتاح</span><b>${money(c.now.cash - c.reserved.cash)}</b><small>${c.reserved.cash > 0 ? `محجوز ${money(c.reserved.cash)} لأوامر معلّقة · ` : ''}${f2.format(c.equityNow ? c.now.cash / c.equityNow * 100 : 100)}% من المحفظة</small></div>
       </div>
       <section class="pf-panel"><h3>منحنى القيمة <span class="pf-legend"><span><i style="background:var(--teal)"></i>المحفظة</span><span><i style="background:#5aa0ff"></i>مؤشر S&amp;P 500 (بنفس رأس المال)</span></span></h3>
         <div class="pf-chart" data-pf-chart>${chartSvg(c.points)}<div class="pf-tip" hidden></div></div>
         ${e ? '<p class="pf-empty-state">لم تنفّذ أي صفقة بعد. اضغط «+ تداول سهم» أو افتح شارت أي سهم واستخدم زر «شراء». يبدأ منحنى الأداء ويُحسب يوميًا بعد أول صفقة.</p>' : ''}
       </section>
       <section class="pf-panel"><h3>المراكز المفتوحة <small>${c.holdings.length} مركز</small></h3>${positionsTable(c)}</section>
+      ${c.orders.length ? `<section class="pf-panel"><h3>الأوامر المعلّقة <small>${c.orders.length} أمر · تُنفَّذ تلقائيًا عند وصول السعر</small></h3>${ordersTable(c)}</section>` : ''}
       <section class="pf-panel"><h3>الأداء اليومي <small>التغير اليومي لقيمة المحفظة مقابل المؤشر</small></h3>${daysTable(shownDays, rowsDays.length)}
         <div class="pf-cards" style="margin-top:12px">
           <div class="pf-card"><span>أفضل يوم</span><b class="${cls(c.best?.pct)}">${c.best ? pct(c.best.pct) : '—'}</b><small>${c.best ? esc(c.best.date) : ''}</small></div>
@@ -198,6 +200,13 @@
       return `<tr><td>${sym(p)}</td><td class="pf-n">${f4.format(p.shares)}</td><td class="pf-n">${f2.format(p.avg)}</td><td class="pf-n">${p.price == null ? '—' : f2.format(p.price)}${p.live ? ' <span class="pf-up" title="سعر لحظي">●</span>' : ''}</td><td class="pf-n ${cls(p.pct)}">${pct(p.pct)}</td><td class="pf-n">${money(val)}</td><td class="pf-n ${cls(pl)}">${signed(pl)}</td><td class="pf-n ${cls(pl)}">${pct(plp)}</td><td class="pf-n">${f2.format(c.equityNow ? val / c.equityNow * 100 : 0)}%</td><td><button class="pf-mini buy" data-pf-trade="buy" data-pf-symbol="${esc(p.symbol)}">شراء</button> <button class="pf-mini sell" data-pf-trade="sell" data-pf-symbol="${esc(p.symbol)}">بيع</button></td></tr>`;
     }).join('');
     return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>السهم</th><th class="pf-n">الكمية</th><th class="pf-n">متوسط التكلفة</th><th class="pf-n">آخر سعر</th><th class="pf-n">تغير اليوم</th><th class="pf-n">القيمة</th><th class="pf-n">الربح/الخسارة</th><th class="pf-n">%</th><th class="pf-n">الوزن</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  function ordersTable(c) {
+    const rows = c.orders.map(o => {
+      const px = priceNow(o.symbol).price, away = px ? (o.limit / px - 1) * 100 : null;
+      return `<tr><td>${sym(o)}</td><td><b class="${o.side === 'buy' ? 'pf-up' : 'pf-down'}">${o.side === 'buy' ? 'شراء' : 'بيع'}</b></td><td class="pf-n">${f4.format(o.qty)}</td><td class="pf-n">${f2.format(o.limit)}</td><td class="pf-n">${px == null ? '—' : f2.format(px)}</td><td class="pf-n">${pct(away)}</td><td class="pf-n">${money(o.qty * o.limit)}</td><td>${esc(o.createdAt.slice(0, 16).replace('T', ' '))}</td><td><button class="pf-cancel-btn" data-pf-cancel="${esc(o.id)}">إلغاء</button></td></tr>`;
+    }).join('');
+    return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>السهم</th><th>النوع</th><th class="pf-n">الكمية</th><th class="pf-n">سعر الأمر</th><th class="pf-n">السعر الحالي</th><th class="pf-n">البعد عن الحالي</th><th class="pf-n">المحجوز/المتوقع</th><th>وُضع (UTC)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function daysTable(rows, total) {
     if (!rows.length) return '<p class="pf-empty-state">يظهر الأداء اليومي بعد أول جلسة تداول بعد الصفقة الأولى.</p>';
@@ -227,6 +236,8 @@
   // ---------- أزرار الصفحة ----------
   root.addEventListener('click', ev => {
     if (ev.target.closest('[data-pf-days]')) { S.showAllDays = !S.showAllDays; refresh(); return; }
+    const cancel = ev.target.closest('[data-pf-cancel]');
+    if (cancel) { P.cancelOrder(cancel.dataset.pfCancel); return; }
     if (ev.target.closest('[data-pf-export]')) {
       const blob = new Blob([JSON.stringify(P.load(), null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `us-halal-portfolio-${P.etDate()}.json` });
@@ -241,7 +252,7 @@
     S.picking = false; const input = ev.target.closest('[data-pf-file]'); if (!input?.files?.[0]) return;
     try {
       const s = JSON.parse(await input.files[0].text());
-      if (!s || !Array.isArray(s.trades) || !Number.isFinite(s.startCash) || !s.startDate || s.trades.some(t => !t.symbol || !(t.qty > 0) || !(t.price > 0) || !['buy', 'sell'].includes(t.side) || !t.date)) throw new Error('bad');
+      if (!s || !Array.isArray(s.trades) || !Number.isFinite(s.startCash) || !s.startDate || s.trades.some(t => !t.symbol || !(t.qty > 0) || !(t.price > 0) || !['buy', 'sell'].includes(t.side) || !t.date) || (s.orders && !Array.isArray(s.orders))) throw new Error('bad');
       if (confirm(`استيراد محفظة فيها ${s.trades.length} صفقة؟ ستُستبدل المحفظة الحالية.`)) P.save({ ...s, v: 1 });
     } catch { alert('الملف غير صالح: يجب أن يكون نسخة احتياطية مُصدَّرة من هذه الصفحة.'); }
   });

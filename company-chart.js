@@ -468,7 +468,7 @@
       tick();
     }
     const ilegend = panel.querySelector('.cc-ilegend'), stage = panel.querySelector('.cc-stage'), dlg = panel.querySelector('.cc-dlg');
-    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null, volSeries = null, lastBuildAt = 0, liveTimer = null, liveBusy = false, avgLine = null;
+    let chart = null, LWC = null, colors = null, data = [], main = null, calc = {}, drawn = [], preview = null, volSeries = null, lastBuildAt = 0, liveTimer = null, liveBusy = false, avgLine = null, orderLines = [];
     // المؤشرات على الشارت: المؤشر المحدد، ولوحة كل مؤشر، وخطوطه (لتحديده بالضغط عليه)
     let selInd = null, paneIds = [null], indLines = [], selPrims = [];
     // تحرير الرسوم: الرسمة المحددة، والسحب الجاري، ونقطة المغناطيس تحت المؤشر قبل الضغطة الأولى
@@ -899,7 +899,7 @@
         ? chart.addSeries(LWC.CandlestickSeries, { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: colors.muted })
         : chart.addSeries(LWC.AreaSeries, { lineColor: colors.gold, topColor: colors.gold + '55', bottomColor: colors.gold + '00', lineWidth: 2, priceLineColor: colors.muted });
       main.setData(state.type === 'candles' ? data.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })) : data.map(b => ({ time: b.time, value: b.close })));
-      avgLine = null; drawAvg();
+      avgLine = null; orderLines = []; drawAvg();
       indLines = []; selPrims = []; volSeries = null; lastBuildAt = Date.now();
       if (shownInd('vol')) {
         const s = indCfg.vol, upC = plotColor('vol', 'up'), downC = plotColor('vol', 'down');
@@ -1766,6 +1766,11 @@
       try { if (avgLine) { main.removePriceLine(avgLine); avgLine = null; } } catch { avgLine = null; }
       const h = window.Portfolio?.holding?.(symbol);
       if (h?.avg > 0) avgLine = main.createPriceLine({ price: h.avg, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `متوسط شرائك · ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(h.shares)} سهم` });
+      // الأوامر المعلّقة (حد سعر) خطوط منقطة على الشارت
+      for (const l of orderLines) { try { main.removePriceLine(l); } catch { /* ignore */ } }
+      orderLines = [];
+      const P = window.Portfolio;
+      if (P) for (const o of P.openOrders(P.load(), String(symbol))) orderLines.push(main.createPriceLine({ price: o.limit, color: o.side === 'buy' ? '#2bb673' : '#e5484d', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: `${o.side === 'buy' ? 'شراء' : 'بيع'} معلّق ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(o.qty)}` }));
     }
     const onPortfolio = () => drawAvg();
     window.addEventListener('portfolio:change', onPortfolio);
