@@ -11,6 +11,9 @@
   const signed = n => `${n > 0 ? '+' : n < 0 ? '-' : ''}$${f2.format(Math.abs(n))}`;
   const pct = n => n == null || !Number.isFinite(n) ? '—' : `${n > 0 ? '+' : ''}${f2.format(n)}%`;
   const cls = n => n > 0 ? 'pf-up' : n < 0 ? 'pf-down' : '';
+  // قيمة ملوّنة داخل كبسولة (أخضر/أحمر) مثل جداول بقية الموقع
+  const chip = (text, n) => `<span class="pf-chip ${cls(n)}">${text}</span>`;
+  const side = s => `<span class="pf-side ${s}">${s === 'buy' ? 'شراء' : 'بيع'}</span>`;
   const BENCH = 'SPX';
 
   const S = { snap: null, candles: new Map(), quotes: new Map(), showAllDays: false, ready: false, tab: 'days' };
@@ -144,12 +147,15 @@
     const x = i => L + (n === 1 ? 0.5 : i / (n - 1)) * (W - L - R), y = v => T + (hi - v) / (hi - lo) * (H - T - B);
     const path = key => points.map((p, i) => p[key] == null ? '' : `${points.slice(0, i).some(q => q[key] != null) ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p[key]).toFixed(1)}`).join('');
     const ticks = [0, 1, 2, 3, 4].map(k => lo + (hi - lo) * k / 4);
-    const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="currentColor" opacity=".12"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="currentColor" opacity=".65">${f0.format(v)}</text>`).join('');
+    const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="currentColor" opacity=".14" stroke-dasharray="3 5"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="currentColor" opacity=".65">${f0.format(v)}</text>`).join('');
     const xs = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i).map(i => `<text x="${x(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" font-size="11" fill="currentColor" opacity=".65">${esc(points[i].label)}</text>`).join('');
     const base = `<line x1="${L}" x2="${W - R}" y1="${y(points[0].equity)}" y2="${y(points[0].equity)}" stroke="currentColor" opacity=".35" stroke-dasharray="4 4"/>`;
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="منحنى قيمة المحفظة مقابل مؤشر S&P 500"><g>${grid}${base}${xs}</g>
-      <path d="${path('bench')}" fill="none" stroke="#5aa0ff" stroke-width="2" opacity=".9"/>
-      <path d="${path('equity')}" fill="none" stroke="var(--teal)" stroke-width="2.6"/>
+    const area = `${path('equity')}L${x(n - 1).toFixed(1)} ${H - B}L${x(0).toFixed(1)} ${H - B}Z`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="منحنى قيمة المحفظة مقابل مؤشر S&P 500"><defs><linearGradient id="pf-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--teal)" stop-opacity=".18"/><stop offset="1" stop-color="var(--teal)" stop-opacity="0"/></linearGradient></defs><g>${grid}${base}${xs}</g>
+      <path d="${area}" fill="url(#pf-area)" stroke="none"/>
+      <path d="${path('bench')}" fill="none" stroke="#5aa0ff" stroke-width="2" opacity=".9" stroke-dasharray="6 4"/>
+      <path d="${path('equity')}" fill="none" stroke="var(--teal)" stroke-width="2.6" stroke-linejoin="round"/>
+      <circle cx="${x(n - 1)}" cy="${y(points[n - 1].equity)}" r="9" fill="var(--teal)" opacity=".2"/>
       <circle cx="${x(n - 1)}" cy="${y(points[n - 1].equity)}" r="4" fill="var(--teal)"/>
       <line data-pf-cross y1="${T}" y2="${H - B}" stroke="currentColor" opacity=".35" visibility="hidden"/></svg>`;
   }
@@ -161,34 +167,47 @@
     const trades = [...c.state.trades].reverse();
     const winRate = c.now.sells ? `${f0.format(c.now.wins / c.now.sells * 100)}%` : '—';
     const live = window.LiveQuotes?.enabled && window.LiveQuotes.isExtendedHours();
+    const stockShare = c.equityNow ? c.valueNow / c.equityNow * 100 : 0;
+    const rel = c.benchPct == null ? null : c.totalPct - c.benchPct;
     root.innerHTML = `
-      <div class="pf-title">
-        <div><h2>المحفظة الافتراضية</h2><p>رصيد ابتدائي ${money(c.state.startCash)} منذ ${esc(c.state.startDate)} · تداول افتراضي بآخر سعر ${live ? '<span class="pf-up">● لحظي</span>' : '(آخر سعر متاح)'} · بلا عمولات</p></div>
+      <section class="pf-hero">
+        <div class="pf-hero-main">
+          <div class="pf-title"><h2>المحفظة الافتراضية</h2><p>رصيد ابتدائي ${money(c.state.startCash)} منذ ${esc(c.state.startDate)} · تداول افتراضي بآخر سعر ${live ? '<span class="pf-up">● لحظي</span>' : '(آخر سعر متاح)'} · بلا عمولات</p></div>
+          <div class="pf-hero-value">
+            <span class="pf-hero-label">القيمة الإجمالية</span>
+            <b><bdi>${money(c.equityNow)}</bdi></b>
+            <div class="pf-hero-pills">${chip(`اليوم <bdi>${signed(c.dayPL)}</bdi> · <bdi>${pct(c.dayPct)}</bdi>`, c.dayPL)}${chip(`منذ البداية <bdi>${pct(c.totalPct)}</bdi>`, c.totalPL)}</div>
+          </div>
+          <div class="pf-alloc" title="توزيع المحفظة بين الأسهم والنقد">
+            <div class="pf-alloc-bar"><i style="width:${f2.format(Math.max(0, Math.min(100, stockShare)))}%"></i></div>
+            <div class="pf-alloc-legend"><span><i class="s"></i>أسهم <bdi>${money(c.valueNow)}</bdi> · <bdi>${f2.format(stockShare)}%</bdi></span><span><i class="c"></i>نقد <bdi>${money(c.now.cash)}</bdi> · <bdi>${f2.format(100 - stockShare)}%</bdi></span></div>
+          </div>
+        </div>
         <div class="pf-actions"><button class="pf-btn primary" data-pf-trade="buy">+ تداول سهم</button><button class="pf-btn" data-pf-export>تصدير نسخة احتياطية</button><button class="pf-btn" data-pf-import>استيراد</button><button class="pf-btn danger" data-pf-reset>إعادة ضبط</button><input type="file" accept="application/json" data-pf-file hidden></div>
+      </section>
+      <div class="pf-cards pf-kpis">
+        <div class="pf-card" data-k="day"><span>أداء اليوم</span><b class="${cls(c.dayPL)}">${signed(c.dayPL)}</b><small class="${cls(c.dayPL)}">${pct(c.dayPct)}</small></div>
+        <div class="pf-card" data-k="total"><span>العائد الكلي</span><b class="${cls(c.totalPL)}">${signed(c.totalPL)}</b><small class="${cls(c.totalPL)}">${pct(c.totalPct)}</small></div>
+        <div class="pf-card" data-k="bench"><span>مقابل S&amp;P 500</span><b class="pf-pp ${cls(rel ?? 0)}">${rel == null ? '—' : `<bdi>${rel > 0 ? '+' : ''}${f2.format(rel)}</bdi><em>نقطة مئوية</em>`}</b><small>المؤشر <bdi>${pct(c.benchPct)}</bdi> · المحفظة <bdi>${pct(c.totalPct)}</bdi></small></div>
+        <div class="pf-card" data-k="cash"><span>النقد المتاح</span><b>${money(c.now.cash - c.reserved.cash)}</b><small>${c.reserved.cash > 0 ? `محجوز <bdi>${money(c.reserved.cash)}</bdi> لأوامر معلّقة` : `<bdi>${f2.format(c.equityNow ? c.now.cash / c.equityNow * 100 : 100)}%</bdi> من المحفظة`}</small></div>
       </div>
-      <div class="pf-cards">
-        <div class="pf-card"><span>القيمة الإجمالية</span><b>${money(c.equityNow)}</b><small>أسهم ${money(c.valueNow)} + نقد ${money(c.now.cash)}</small></div>
-        <div class="pf-card"><span>أداء اليوم</span><b class="${cls(c.dayPL)}">${signed(c.dayPL)}</b><small class="${cls(c.dayPL)}">${pct(c.dayPct)}</small></div>
-        <div class="pf-card"><span>العائد الكلي</span><b class="${cls(c.totalPL)}">${signed(c.totalPL)}</b><small class="${cls(c.totalPL)}">${pct(c.totalPct)}</small></div>
-        <div class="pf-card"><span>مقابل S&amp;P 500</span><b class="${cls(c.benchPct == null ? 0 : c.totalPct - c.benchPct)}">${c.benchPct == null ? '—' : `${c.totalPct - c.benchPct > 0 ? '+' : ''}${f2.format(c.totalPct - c.benchPct)} ن.م.`}</b><small>المؤشر ${pct(c.benchPct)} · المحفظة ${pct(c.totalPct)}</small></div>
-        <div class="pf-card"><span>النقد المتاح</span><b>${money(c.now.cash - c.reserved.cash)}</b><small>${c.reserved.cash > 0 ? `محجوز ${money(c.reserved.cash)} لأوامر معلّقة · ` : ''}${f2.format(c.equityNow ? c.now.cash / c.equityNow * 100 : 100)}% من المحفظة</small></div>
-      </div>
-      <section class="pf-panel"><h3>منحنى القيمة <span class="pf-legend"><span><i style="background:var(--teal)"></i>المحفظة</span><span><i style="background:#5aa0ff"></i>مؤشر S&amp;P 500 (بنفس رأس المال)</span></span></h3>
+      <section class="pf-panel" data-sec="chart"><h3>منحنى القيمة <span class="pf-legend"><span><i style="background:var(--teal)"></i>المحفظة</span><span><i style="background:#5aa0ff"></i>مؤشر S&amp;P 500 (بنفس رأس المال)</span></span></h3>
         <div class="pf-chart" data-pf-chart>${chartSvg(c.points)}<div class="pf-tip" hidden></div></div>
         ${e ? '<p class="pf-empty-state">لم تنفّذ أي صفقة بعد. اضغط «+ تداول سهم» أو افتح شارت أي سهم واستخدم زر «شراء». يبدأ منحنى الأداء ويُحسب يوميًا بعد أول صفقة.</p>' : ''}
       </section>
-      <section class="pf-panel"><h3>المراكز المفتوحة <small>${c.holdings.length} مركز</small></h3>${positionsTable(c)}</section>
-      ${c.orders.length ? `<section class="pf-panel"><h3>الأوامر المعلّقة <small>${c.orders.length} أمر · تُنفَّذ تلقائيًا عند وصول السعر</small></h3>${ordersTable(c)}</section>` : ''}
-      <section class="pf-panel"><h3>الأداء اليومي <small>التغير اليومي لقيمة المحفظة مقابل المؤشر</small></h3>${daysTable(shownDays, rowsDays.length)}
-        <div class="pf-cards" style="margin-top:12px">
-          <div class="pf-card"><span>أفضل يوم</span><b class="${cls(c.best?.pct)}">${c.best ? pct(c.best.pct) : '—'}</b><small>${c.best ? esc(c.best.date) : ''}</small></div>
-          <div class="pf-card"><span>أسوأ يوم</span><b class="${cls(c.worst?.pct)}">${c.worst ? pct(c.worst.pct) : '—'}</b><small>${c.worst ? esc(c.worst.date) : ''}</small></div>
-          <div class="pf-card"><span>أقصى تراجع</span><b class="${cls(c.maxDd)}">${pct(c.maxDd)}</b><small>من أعلى قيمة بلغتها</small></div>
-          <div class="pf-card"><span>ربح محقق</span><b class="${cls(c.now.realized)}">${signed(c.now.realized)}</b><small>نسبة الصفقات الرابحة ${winRate}</small></div>
-          <div class="pf-card"><span>ربح غير محقق</span><b class="${cls(c.unrealized)}">${signed(c.unrealized)}</b><small>${c.state.trades.length} صفقة</small></div>
+      <section class="pf-panel" data-sec="positions"><h3>المراكز المفتوحة <small>${c.holdings.length} مركز</small></h3>${positionsTable(c)}</section>
+      ${c.orders.length ? `<section class="pf-panel" data-sec="orders"><h3>الأوامر المعلّقة <small>${c.orders.length} أمر · تُنفَّذ تلقائيًا عند وصول السعر</small></h3>${ordersTable(c)}</section>` : ''}
+      <section class="pf-panel" data-sec="days"><h3>الأداء اليومي <small>التغير اليومي لقيمة المحفظة مقابل المؤشر</small></h3>
+        <div class="pf-cards pf-stats">
+          <div class="pf-card" data-k="best"><span>أفضل يوم</span><b class="${cls(c.best?.pct)}">${c.best ? pct(c.best.pct) : '—'}</b><small>${c.best ? esc(c.best.date) : '&nbsp;'}</small></div>
+          <div class="pf-card" data-k="worst"><span>أسوأ يوم</span><b class="${cls(c.worst?.pct)}">${c.worst ? pct(c.worst.pct) : '—'}</b><small>${c.worst ? esc(c.worst.date) : '&nbsp;'}</small></div>
+          <div class="pf-card" data-k="dd"><span>أقصى تراجع</span><b class="${cls(c.maxDd)}">${pct(c.maxDd)}</b><small>من أعلى قيمة بلغتها</small></div>
+          <div class="pf-card" data-k="realized"><span>ربح محقق</span><b class="${cls(c.now.realized)}">${signed(c.now.realized)}</b><small>الصفقات الرابحة ${winRate}</small></div>
+          <div class="pf-card" data-k="unrealized"><span>ربح غير محقق</span><b class="${cls(c.unrealized)}">${signed(c.unrealized)}</b><small>${c.state.trades.length} صفقة</small></div>
         </div>
+        ${daysTable(shownDays, rowsDays.length)}
       </section>
-      <section class="pf-panel"><h3>سجل الصفقات <small>${trades.length} صفقة</small></h3>${tradesTable(trades)}</section>
+      <section class="pf-panel" data-sec="trades"><h3>سجل الصفقات <small>${trades.length} صفقة</small></h3>${tradesTable(trades)}</section>
       <p class="pf-note-box">المحفظة افتراضية بالكامل ومحفوظة في هذا المتصفح فقط (احتفظ بنسخة احتياطية عبر «تصدير»). تُنفَّذ الأوامر بآخر سعر متاح بلا عمولات ولا انزلاق ولا ضرائب، وليست توصية استثمارية. الأداء اليومي يُحسب من أسعار الإغلاق، واليوم الحالي بالسعر الأحدث. أداء المؤشر لنفس رأس المال من إغلاق اليوم السابق لأول صفقة.</p>`;
     bindChart(c);
   }
@@ -196,26 +215,26 @@
   function positionsTable(c) {
     if (!c.holdings.length) return '<p class="pf-empty-state">لا توجد مراكز مفتوحة.</p>';
     const rows = [...c.holdings].sort((a, b) => b.shares * (b.price ?? b.avg) - a.shares * (a.price ?? a.avg)).map(p => {
-      const px = p.price ?? p.avg, val = px * p.shares, pl = val - p.cost, plp = p.cost ? pl / p.cost * 100 : 0;
-      return `<tr><td>${sym(p)}</td><td class="pf-n">${f4.format(p.shares)}</td><td class="pf-n">${f2.format(p.avg)}</td><td class="pf-n">${p.price == null ? '—' : f2.format(p.price)}${p.live ? ' <span class="pf-up" title="سعر لحظي">●</span>' : ''}</td><td class="pf-n ${cls(p.pct)}">${pct(p.pct)}</td><td class="pf-n">${money(val)}</td><td class="pf-n ${cls(pl)}">${signed(pl)}</td><td class="pf-n ${cls(pl)}">${pct(plp)}</td><td class="pf-n">${f2.format(c.equityNow ? val / c.equityNow * 100 : 0)}%</td><td><button class="pf-mini buy" data-pf-trade="buy" data-pf-symbol="${esc(p.symbol)}">شراء</button> <button class="pf-mini sell" data-pf-trade="sell" data-pf-symbol="${esc(p.symbol)}">بيع</button></td></tr>`;
+      const px = p.price ?? p.avg, val = px * p.shares, pl = val - p.cost, plp = p.cost ? pl / p.cost * 100 : 0, w = c.equityNow ? val / c.equityNow * 100 : 0;
+      return `<tr><td>${sym(p)}</td><td class="pf-n">${f4.format(p.shares)}</td><td class="pf-n">${f2.format(p.avg)}</td><td class="pf-n">${p.price == null ? '—' : f2.format(p.price)}${p.live ? ' <span class="pf-up" title="سعر لحظي">●</span>' : ''}</td><td class="pf-n">${chip(pct(p.pct), p.pct)}</td><td class="pf-n"><b>${money(val)}</b></td><td class="pf-n">${chip(signed(pl), pl)}<small class="pf-sub ${cls(pl)}">${pct(plp)}</small></td><td class="pf-n"><span class="pf-w"><i style="width:${f2.format(Math.min(100, w))}%"></i></span><small class="pf-sub">${f2.format(w)}%</small></td><td class="pf-act"><button class="pf-mini buy" data-pf-trade="buy" data-pf-symbol="${esc(p.symbol)}">شراء</button><button class="pf-mini sell" data-pf-trade="sell" data-pf-symbol="${esc(p.symbol)}">بيع</button></td></tr>`;
     }).join('');
-    return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>السهم</th><th class="pf-n">الكمية</th><th class="pf-n">متوسط التكلفة</th><th class="pf-n">آخر سعر</th><th class="pf-n">تغير اليوم</th><th class="pf-n">القيمة</th><th class="pf-n">الربح/الخسارة</th><th class="pf-n">%</th><th class="pf-n">الوزن</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>السهم</th><th class="pf-n">الكمية</th><th class="pf-n">متوسط التكلفة</th><th class="pf-n">آخر سعر</th><th class="pf-n">تغير اليوم</th><th class="pf-n">القيمة</th><th class="pf-n">الربح/الخسارة</th><th class="pf-n">الوزن</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function ordersTable(c) {
     const rows = c.orders.map(o => {
       const px = priceNow(o.symbol).price, away = px ? (o.limit / px - 1) * 100 : null;
-      return `<tr><td>${sym(o)}</td><td><b class="${o.side === 'buy' ? 'pf-up' : 'pf-down'}">${o.side === 'buy' ? 'شراء' : 'بيع'}</b></td><td class="pf-n">${f4.format(o.qty)}</td><td class="pf-n">${f2.format(o.limit)}</td><td class="pf-n">${px == null ? '—' : f2.format(px)}</td><td class="pf-n">${pct(away)}</td><td class="pf-n">${money(o.qty * o.limit)}</td><td>${esc(o.createdAt.slice(0, 16).replace('T', ' '))}</td><td><button class="pf-cancel-btn" data-pf-cancel="${esc(o.id)}">إلغاء</button></td></tr>`;
+      return `<tr><td>${sym(o)}</td><td>${side(o.side)}</td><td class="pf-n">${f4.format(o.qty)}</td><td class="pf-n">${f2.format(o.limit)}</td><td class="pf-n">${px == null ? '—' : f2.format(px)}</td><td class="pf-n">${pct(away)}</td><td class="pf-n">${money(o.qty * o.limit)}</td><td>${esc(o.createdAt.slice(0, 16).replace('T', ' '))}</td><td><button class="pf-cancel-btn" data-pf-cancel="${esc(o.id)}">إلغاء</button></td></tr>`;
     }).join('');
     return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>السهم</th><th>النوع</th><th class="pf-n">الكمية</th><th class="pf-n">سعر الأمر</th><th class="pf-n">السعر الحالي</th><th class="pf-n">البعد عن الحالي</th><th class="pf-n">المحجوز/المتوقع</th><th>وُضع (UTC)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function daysTable(rows, total) {
     if (!rows.length) return '<p class="pf-empty-state">يظهر الأداء اليومي بعد أول جلسة تداول بعد الصفقة الأولى.</p>';
-    const body = rows.map(r => `<tr><td>${esc(r.date)}${r.today ? ' <small class="pf-up">اليوم</small>' : ''}</td><td class="pf-n">${money(r.equity)}</td><td class="pf-n ${cls(r.change)}">${signed(r.change)}</td><td class="pf-n ${cls(r.pct)}">${pct(r.pct)}</td><td class="pf-n ${cls(r.benchPct)}">${pct(r.benchPct)}</td><td class="pf-n ${cls(r.benchPct == null ? 0 : r.pct - r.benchPct)}">${r.benchPct == null ? '—' : `${r.pct - r.benchPct > 0 ? '+' : ''}${f2.format(r.pct - r.benchPct)}`}</td></tr>`).join('');
+    const body = rows.map(r => `<tr><td>${esc(r.date)}${r.today ? ' <small class="pf-up">اليوم</small>' : ''}</td><td class="pf-n">${money(r.equity)}</td><td class="pf-n">${chip(signed(r.change), r.change)}</td><td class="pf-n">${chip(pct(r.pct), r.pct)}</td><td class="pf-n ${cls(r.benchPct)}">${pct(r.benchPct)}</td><td class="pf-n ${cls(r.benchPct == null ? 0 : r.pct - r.benchPct)}">${r.benchPct == null ? '—' : `${r.pct - r.benchPct > 0 ? '+' : ''}${f2.format(r.pct - r.benchPct)}`}</td></tr>`).join('');
     return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>التاريخ</th><th class="pf-n">قيمة المحفظة</th><th class="pf-n">التغير ($)</th><th class="pf-n">التغير (%)</th><th class="pf-n">S&amp;P 500 (%)</th><th class="pf-n">الفرق (ن.م.)</th></tr></thead><tbody>${body}</tbody></table></div>${total > rows.length ? `<p style="text-align:center;margin:10px 0 0"><button class="pf-btn" data-pf-days>عرض كل الأيام (${total})</button></p>` : S.showAllDays && total > 15 ? '<p style="text-align:center;margin:10px 0 0"><button class="pf-btn" data-pf-days>عرض أقل</button></p>' : ''}`;
   }
   function tradesTable(trades) {
     if (!trades.length) return '<p class="pf-empty-state">لا توجد صفقات بعد.</p>';
-    const rows = trades.map(t => `<tr><td>${esc(t.t.slice(0, 16).replace('T', ' '))}</td><td><b class="${t.side === 'buy' ? 'pf-up' : 'pf-down'}">${t.side === 'buy' ? 'شراء' : 'بيع'}</b></td><td>${sym(t)}</td><td class="pf-n">${f4.format(t.qty)}</td><td class="pf-n">${f2.format(t.price)}</td><td class="pf-n">${money(t.total)}</td><td class="pf-n ${cls(t.realized)}">${t.side === 'sell' && t.realized != null ? signed(t.realized) : '—'}</td></tr>`).join('');
+    const rows = trades.map(t => `<tr><td class="pf-time">${esc(t.t.slice(0, 16).replace('T', ' '))}</td><td>${side(t.side)}</td><td>${sym(t)}</td><td class="pf-n">${f4.format(t.qty)}</td><td class="pf-n">${f2.format(t.price)}</td><td class="pf-n">${money(t.total)}</td><td class="pf-n">${t.side === 'sell' && t.realized != null ? chip(signed(t.realized), t.realized) : '<span class="pf-muted">—</span>'}</td></tr>`).join('');
     return `<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>الوقت (UTC)</th><th>النوع</th><th>السهم</th><th class="pf-n">الكمية</th><th class="pf-n">السعر</th><th class="pf-n">الإجمالي</th><th class="pf-n">ربح محقق</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function bindChart(c) {

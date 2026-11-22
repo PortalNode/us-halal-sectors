@@ -60,6 +60,9 @@
   --i-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
   --i-star:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.5 2.3a.5.5 0 0 1 1 0l2.3 4.7a2 2 0 0 0 1.5 1.1l5.2.8a.5.5 0 0 1 .3.9l-3.8 3.6a2 2 0 0 0-.6 1.8l.9 5.2a.5.5 0 0 1-.8.5l-4.6-2.4a2 2 0 0 0-1.9 0l-4.6 2.4a.5.5 0 0 1-.8-.5l.9-5.2a2 2 0 0 0-.6-1.8L1.7 9.8a.5.5 0 0 1 .3-.9l5.2-.8a2 2 0 0 0 1.5-1.1z'/%3E%3C/svg%3E");
   --i-users:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E");
+  --i-download:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3Cpath d='M12 15V3'/%3E%3C/svg%3E");
+  --i-upload:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpath d='m17 8-5-5-5 5'/%3E%3Cpath d='M12 3v12'/%3E%3C/svg%3E");
+  --i-reset:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E");
 }
 :root[data-theme="light"]{
   --pf-bg:#fff;--pf-bg2:#f7f9fb;--pf-line:#d4dce5;--pf-ink:#172d42;--pf-muted:#5e6e80;--pf-gold:#b86e00;--pf-gold-soft:#f59e0b1f;--pf-track:#e3e9ef;
@@ -495,9 +498,16 @@ html body .site-bar{column-gap:12px}
 html body .site-nav{gap:2px}
 html body .site-nav a{gap:6px;padding:7px 9px}
 
-/* ---------------- المحفظة ---------------- */
-.pf-title h2{position:relative;display:flex;align-items:center;min-height:30px;padding-inline-start:40px;--ico:var(--i-wallet)}
-.pf-panel > h3{position:relative;display:flex;align-items:center;min-height:30px;padding-inline-start:40px;--ico:var(--i-trend)}
+/* ---------------- المحفظة (portfolio-page.js) ---------------- */
+html body .pf-page{gap:14px}
+/* عنوان القسم: أيقونة داخل مربع ذهبي */
+.pf-title h2,.pf-panel > h3{position:relative;display:flex;align-items:center;min-height:30px;padding-inline-start:40px}
+.pf-title h2{--ico:var(--i-wallet)}
+.pf-panel[data-sec="chart"]{--ico:var(--i-trend)}
+.pf-panel[data-sec="positions"]{--ico:var(--i-briefcase)}
+.pf-panel[data-sec="orders"]{--ico:var(--i-clock)}
+.pf-panel[data-sec="days"]{--ico:var(--i-calendar)}
+.pf-panel[data-sec="trades"]{--ico:var(--i-list)}
 .pf-title h2::before,.pf-panel > h3::before{
   content:"";position:absolute;inset-inline-start:0;top:50%;width:30px;height:30px;margin-top:-15px;border-radius:10px;
   background:var(--pf-gold-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pf-gold) 30%,transparent);
@@ -506,16 +516,135 @@ html body .site-nav a{gap:6px;padding:7px 9px}
   content:"";position:absolute;inset-inline-start:7px;top:50%;width:16px;height:16px;margin-top:-8px;background:var(--pf-gold);
   -webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat;
 }
-.pf-panel:has(table) > h3{--ico:var(--i-table)}
-html body .pf-card{border-color:var(--pf-line);border-radius:var(--e7-r-sm);background:var(--e7-tile)}
-html body .pf-card:first-child{background:radial-gradient(120% 90% at 100% 0%,var(--pf-gold-soft),transparent 60%),var(--e7-tile);border-color:color-mix(in srgb,var(--pf-gold) 40%,var(--pf-line))}
-html body .pf-panel{border-color:var(--pf-line);border-radius:var(--e7-r);background:linear-gradient(180deg,var(--e7-glow),transparent 120px),var(--pf-bg);box-shadow:var(--e7-shadow)}
-html body .pf-btn{border-radius:10px}
-html body .pf-page .pf-table-wrap{border-radius:var(--e7-r-sm)}
+html body .pf-panel > h3{margin:0 0 14px;font-size:15px}
+html body .pf-panel > h3 small{padding:3px 10px;border-radius:999px;background:var(--e7-tile);border:1px solid var(--pf-line);font-size:11px;font-weight:600}
+
+/* البطاقة الرئيسية: العنوان + القيمة الإجمالية + توزيع الأسهم والنقد + الأزرار */
+html body .pf-hero{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px 24px;flex-wrap:wrap;padding:18px 20px;
+  border:1px solid color-mix(in srgb,var(--pf-gold) 30%,var(--pf-line));border-radius:var(--e7-r);
+  background:radial-gradient(90% 140% at 100% 0%,var(--pf-gold-soft),transparent 55%),var(--pf-bg);box-shadow:var(--e7-shadow);
+}
+.pf-hero-main{display:grid;gap:14px;flex:1 1 420px;min-width:0}
+html body .pf-hero .pf-title{display:block}
+html body .pf-hero .pf-title h2{font-size:20px;margin:0}
+html body .pf-hero .pf-title p{margin:6px 0 0;font-size:12px;color:var(--pf-muted)}
+.pf-hero-value{display:grid;gap:6px}
+.pf-hero-label{font-size:12px;font-weight:700;color:var(--pf-muted)}
+.pf-hero-value > b{font-size:38px;line-height:1.1;font-weight:800;color:var(--pf-ink);letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.pf-hero-pills{display:flex;flex-wrap:wrap;gap:6px}
+.pf-hero-pills .pf-chip{font-size:12px;padding:4px 11px}
+.pf-alloc{display:grid;gap:7px;max-width:520px}
+.pf-alloc-bar{height:8px;border-radius:999px;background:var(--pf-track);overflow:hidden;display:flex;justify-content:flex-start}
+.pf-alloc-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#fbbf24,var(--pf-gold))}
+.pf-alloc-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11.5px;color:var(--pf-muted)}
+.pf-alloc-legend span{display:inline-flex;align-items:center;gap:6px}
+.pf-alloc-legend i{width:9px;height:9px;border-radius:3px;flex:none}
+.pf-alloc-legend i.s{background:var(--pf-gold)}
+.pf-alloc-legend i.c{background:var(--pf-track);box-shadow:inset 0 0 0 1px var(--pf-muted)}
+.pf-alloc-legend bdi{color:var(--pf-ink);font-weight:700}
+/* الأزرار: الأساسي ذهبي، والباقي أزرار هادئة بأيقونات */
+html body .pf-hero .pf-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:0 0 auto;min-width:300px}
+html body .pf-hero .pf-actions .primary{grid-column:1/-1;min-height:42px;font-size:14px}
+html body .pf-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:10px;border-color:var(--pf-line);background:var(--e7-tile);font-weight:700}
+html body .pf-btn.primary{background:linear-gradient(135deg,#fbbf24,var(--pf-gold));border-color:transparent;color:var(--e7-on-gold);box-shadow:0 8px 20px -10px color-mix(in srgb,var(--pf-gold) 90%,transparent)}
+html body .pf-btn.primary:hover{color:var(--e7-on-gold);filter:brightness(1.07)}
+.pf-btn[data-pf-export],.pf-btn[data-pf-import],.pf-btn[data-pf-reset]{--ico:var(--i-download)}
+.pf-btn[data-pf-import]{--ico:var(--i-upload)}
+.pf-btn[data-pf-reset]{--ico:var(--i-reset)}
+.pf-btn[data-pf-export]::before,.pf-btn[data-pf-import]::before,.pf-btn[data-pf-reset]::before{
+  content:"";width:15px;height:15px;flex:none;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat;
+}
+
+/* بطاقات الأرقام */
+html body .pf-cards{gap:10px}
+html body .pf-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+html body .pf-stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 14px}
+html body .pf-card{gap:6px;padding:14px 16px;border:1px solid var(--pf-line);border-radius:var(--e7-r-sm);background:var(--e7-tile);transition:border-color .15s}
+html body .pf-card:hover{border-color:color-mix(in srgb,var(--pf-gold) 40%,var(--pf-line))}
+html body .pf-card > span{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--pf-muted)}
+html body .pf-card > span::before{
+  content:"";width:15px;height:15px;flex:none;background:var(--pf-gold);-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat;
+}
+html body .pf-card > b{font-size:22px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;text-align:start;direction:ltr;unicode-bidi:isolate;justify-self:start}
+html body .pf-card > small{font-size:11.5px;color:var(--pf-muted)}
+/* «مقابل S&P 500»: الرقم ثم الوحدة بخط أصغر (كان «ن.م.» ينقلب قبل الرقم) */
+html body .pf-card > b.pf-pp{display:flex;align-items:baseline;gap:6px;direction:rtl}
+.pf-card > b.pf-pp bdi{direction:ltr}
+.pf-card > b.pf-pp em{font-style:normal;font-size:12px;font-weight:700;opacity:.8}
+.pf-card[data-k="day"]{--ico:var(--i-trend)}
+.pf-card[data-k="total"]{--ico:var(--i-logo)}
+.pf-card[data-k="bench"]{--ico:var(--i-scale)}
+.pf-card[data-k="cash"]{--ico:var(--i-cash)}
+.pf-card[data-k="best"]{--ico:var(--i-logo)}
+.pf-card[data-k="worst"]{--ico:var(--i-down)}
+.pf-card[data-k="dd"]{--ico:var(--i-shield)}
+.pf-card[data-k="realized"]{--ico:var(--i-coins)}
+.pf-card[data-k="unrealized"]{--ico:var(--i-hourglass)}
+
+/* اللوحات */
+html body .pf-panel{padding:16px 18px;border:1px solid var(--pf-line);border-radius:var(--e7-r);background:linear-gradient(180deg,var(--e7-glow),transparent 120px),var(--pf-bg);box-shadow:var(--e7-shadow)}
+html body .pf-legend{gap:6px}
+html body .pf-legend > span{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--e7-tile);border:1px solid var(--pf-line);font-size:11px;font-weight:600}
+html body .pf-tip{border-radius:10px;border-color:var(--pf-line);background:var(--pf-bg);box-shadow:0 10px 24px -12px rgba(0,0,0,.6)}
+
+/* الجداول */
+html body .pf-page .pf-table-wrap{border:1px solid var(--pf-line);border-radius:var(--e7-r-sm);background:var(--e7-tile)}
+/* الجداول العامة في الموقع بأعمدة متساوية (table-layout:fixed)؛ هنا تأخذ الأعمدة عرض محتواها فلا يتداخل الرمز مع الكمية */
+html body .pf-page .pf-table{table-layout:auto}
+html body .pf-page .pf-table thead th{padding:11px 12px;font-size:11.5px;font-weight:700;color:var(--pf-muted);background:color-mix(in srgb,var(--pf-line) 45%,transparent);border-bottom:1px solid var(--pf-line)}
+html body .pf-page .pf-table tbody td{padding:11px 12px;font-size:13px;vertical-align:middle}
+html body .pf-page .pf-table tbody tr:hover td{background:color-mix(in srgb,var(--pf-gold) 6%,transparent)}
+html body .pf-table th.pf-n,html body .pf-table td.pf-n{text-align:center}
+.pf-table td.pf-n > b{font-weight:800}
+.pf-table .sym{gap:8px}
+.pf-table .sym .symbol-badge{padding:2px 7px;border-radius:999px;background:var(--pf-gold-soft);color:var(--pf-gold);font-size:10.5px;font-weight:800}
+.pf-table .co-logo-sm{background:#fff;padding:2px;object-fit:contain}
+.pf-sub{display:block;margin-top:3px;font-size:11px;font-weight:700;color:var(--pf-muted);direction:ltr}
+.pf-muted{color:var(--pf-muted)}
+.pf-time{color:var(--pf-muted);font-variant-numeric:tabular-nums;direction:ltr;text-align:right}
+/* كبسولات القيم الموجبة والسالبة */
+.pf-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--pf-ink);background:color-mix(in srgb,var(--pf-muted) 12%,transparent);white-space:nowrap;direction:ltr;unicode-bidi:isolate}
+.pf-hero-pills .pf-chip{direction:rtl}
+.pf-chip.pf-up{color:var(--cq-up,#22c55e);background:color-mix(in srgb,var(--cq-up,#22c55e) 13%,transparent)}
+.pf-chip.pf-down{color:var(--cq-down,#f05252);background:color-mix(in srgb,var(--cq-down,#f05252) 13%,transparent)}
+.pf-chip bdi{direction:ltr}
+/* نوع الصفقة */
+.pf-side{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:800}
+.pf-side.buy{color:var(--cq-up,#22c55e);background:color-mix(in srgb,var(--cq-up,#22c55e) 13%,transparent)}
+.pf-side.sell{color:var(--cq-down,#f05252);background:color-mix(in srgb,var(--cq-down,#f05252) 13%,transparent)}
+/* وزن المركز */
+.pf-w{display:block;width:64px;height:5px;margin:0 auto;border-radius:999px;background:var(--pf-track);overflow:hidden}
+.pf-w i{display:block;height:100%;border-radius:999px;background:var(--pf-gold)}
+/* أزرار شراء/بيع داخل الجدول: كبسولات شفافة بدل الألوان الصارخة */
+.pf-act{white-space:nowrap;text-align:left}
+html body .pf-act .pf-mini{margin-inline-start:4px;padding:4px 12px;border-radius:999px;font-weight:800;border:1px solid transparent}
+html body .pf-act .pf-mini.buy{color:var(--cq-up,#22c55e);background:color-mix(in srgb,var(--cq-up,#22c55e) 13%,transparent);border-color:color-mix(in srgb,var(--cq-up,#22c55e) 35%,transparent)}
+html body .pf-act .pf-mini.sell{color:var(--cq-down,#f05252);background:color-mix(in srgb,var(--cq-down,#f05252) 13%,transparent);border-color:color-mix(in srgb,var(--cq-down,#f05252) 35%,transparent)}
+html body .pf-act .pf-mini:hover{filter:brightness(1.2)}
+html body .pf-cancel-btn{border-radius:999px;padding:3px 12px}
+/* ملاحظة أسفل الصفحة */
+html body .pf-note-box{margin:0;padding:12px 16px 12px 16px;padding-inline-start:40px;position:relative;border:1px dashed var(--pf-line);border-radius:var(--e7-r-sm);font-size:11.5px;--ico:var(--i-info)}
+html body .pf-note-box::before{content:"";position:absolute;inset-inline-start:14px;top:15px;width:16px;height:16px;background:var(--pf-muted);-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
+
+/* نافذة التداول */
 html body .pf-dialog{border-radius:var(--e7-r)}
 html body .pf-tabs,html body .pf-mode{border-radius:12px;overflow:hidden}
 html body .pf-field input,html body .pf-search input,html body .pf-limit input{border-radius:10px}
 html body .pf-quick button,html body .pf-confirm,html body .pf-mini,html body .pf-cancel-btn{border-radius:10px}
+
+@media (max-width:980px){
+  html body .pf-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html body .pf-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  html body .pf-hero{padding:14px}
+  .pf-hero-value > b{font-size:30px}
+  html body .pf-hero .pf-actions{min-width:0;width:100%}
+  html body .pf-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  html body .pf-card > b{font-size:18px}
+  html body .pf-panel{padding:14px 12px}
+}
 
 /* ---------------- أعمدة المقارنة (company.js → barChart) ---------------- */
 .e7c{--e7c-up:var(--pf-gold);--e7c-up-hi:#fbbf24;--e7c-dn:var(--cq-down,#f05252)}
