@@ -46,6 +46,7 @@ COLS = [
     # بيانات صفحة النتائج
     "fiscal_period_current", "total_revenue_ttm", "net_income_ttm", "gross_margin_ttm", "operating_margin_ttm",
     "net_margin_ttm", "return_on_equity_fq", "debt_to_equity_fq", "total_assets_fq", "total_equity_fq",
+    "shrhldrs_equity_fq",  # حقوق المساهمين العاديين (بلا حقوق الأقلية): بديل القيمة الدفترية للسهم إن غابت
     "free_cash_flow_ttm", "beta_5_year", "number_of_employees_fy",
     "total_revenue_fy_h", "net_income_fy_h", "earnings_per_share_diluted_fy_h",
     "total_assets_fy_h", "free_cash_flow_fy_h", "ebitda_fy_h", "fiscal_period_fy_h",
@@ -213,6 +214,13 @@ def main():
         diluted = num(row.get("earnings_per_share_diluted_ttm"), 4)
         basic = num(row.get("earnings_per_share_basic_ttm"), 4)
         book = num(row.get("book_value_per_share_fq"), 4)
+        book_source = "TradingView book_value_per_share_fq"
+        if book is None:
+            # تريدينغ فيو يُسقط القيمة الدفترية للسهم أحيانًا لبعض الشركات؛ نحسبها من حقوق المساهمين العاديين
+            # لآخر ربع ÷ عدد الأسهم القائمة (المعادلة نفسها التي يستخدمها تريدينغ فيو).
+            equity = num(row.get("shrhldrs_equity_fq"))
+            book = round(equity / shares, 4) if equity is not None and shares else None
+            book_source = "shrhldrs_equity_fq / total_shares_outstanding_fundamental" if book is not None else None
         stock = {
             "symbol": ticker,
             "name": NAMES_AR.get(ticker) or row["description"],
@@ -226,6 +234,7 @@ def main():
             "epsBasic": basic,
             "pe": round(price / diluted, 4) if diluted and diluted > 0 and price else None,
             "bookValue": book,
+            "bookValueSource": book_source if book is not None else None,
             "pb": round(price / book, 4) if book and book > 0 and price else None,
             "marketCap": round(market_cap / 1e9, 4) if market_cap else None,  # مليار دولار
             "day": num(row.get("change"), 4),

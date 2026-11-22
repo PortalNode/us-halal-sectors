@@ -65,6 +65,7 @@ const normalized = value => String(value ?? '').normalize('NFKD').replace(/[ً-�
 const numeric = (n, digits=2) => n == null ? '<span class="missing">—</span>' : `<span class="num">${digits===3?epsFormat.format(n):numberFormat.format(n)}</span>`;
 const percent = (n, signed=true) => n == null ? '<span class="missing">—</span>' : `<span class="num ${signed?(n>0?'up':n<0?'down':'flat'):'dividend-yield'}">${signed&&n>0?'+':''}${numberFormat.format(n)}%</span>`;
 const pe = stock => stock.pe != null ? numeric(stock.pe) : stock.eps != null && stock.eps < 0 ? '<span class="loss">خاسرة</span>' : '<span class="missing">—</span>';
+const pb = stock => stock.pb != null ? numeric(stock.pb) : stock.bookValue != null && stock.bookValue < 0 ? '<span class="loss" title="حقوق المساهمين سالبة؛ مكرر القيمة الدفترية غير ذي معنى">حقوق سالبة</span>' : '<span class="missing">—</span>';
 const allStocks = () => data.sectors.flatMap(s => s.stocks);
 const safeNumber = value => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 
@@ -162,7 +163,7 @@ function applyFinancials(){
     stock.pb=book > 0 && price != null && price > 0 ? price/book : null;
     const period=data.financialPeriod?` · ${data.financialPeriod}`:'';
     stock._epsSource=chosen==null?'ربحية السهم غير متاحة':`تريدينغ فيو · ربحية ${kind} لآخر 12 شهرًا${period}`;
-    stock._bookSource=`تريدينغ فيو · القيمة الدفترية للسهم في آخر ربع معلن`;
+    stock._bookSource=stock.bookValue==null?'القيمة الدفترية غير متاحة':String(stock.bookValueSource||'').startsWith('shrhldrs_equity')?'محسوبة: حقوق المساهمين في آخر ربع معلن ÷ عدد الأسهم القائمة (تريدينغ فيو)':'تريدينغ فيو · القيمة الدفترية للسهم في آخر ربع معلن';
     stock._hasCurrentEps=chosen!=null;
   }
   render();
@@ -239,7 +240,7 @@ function row(stock){
   const performanceTitle=`تاريخ بيانات الأداء: ${stock.performanceDate||'غير متاح'}`;
   const companyTitle=`${stock.nameEn||stock.name}${stock.industry?` · ${stock.industry}`:''} · ${stock.exchange||''} · النتائج السنوية`;
   const companyLabel=`<a class="company-results-link" href="company.html?symbol=${encodeURIComponent(stock.symbol)}" title="${escapeHtml(companyTitle)}">${escapeHtml(stock.name)}</a>`;
-  return `<tr><td class="sticky-1"><span class="symbol-cell">${favoriteButton(stock)}<span class="symbol-badge">${escapeHtml(stock.symbol)}</span></span></td><td class="sticky-2 company-name">${companyLabel}</td><td title="${escapeHtml(priceTitle)}">${stock.price==null?'<span class="missing">—</span>':`<span class="num price">${numberFormat.format(stock.price)}</span>`}</td><td>${percent(stock.day)}</td><td title="${escapeHtml(stock._epsSource||'')}">${numeric(stock.eps,2)}</td><td>${pe(stock)}</td><td title="${escapeHtml(stock._bookSource||'')}">${numeric(stock.bookValue)}</td><td>${numeric(stock.pb)}</td><td title="${escapeHtml(dividendTitle)}">${percent(stock.dividendYield,false)}</td><td>${range52(stock)}</td><td title="${escapeHtml(`القيمة السوقية بمليار دولار · ${priceTitle}`)}">${numeric(stock.marketCap)}</td><td title="${escapeHtml(`القيمة المتداولة بمليون دولار · ${priceTitle}`)}">${stock.tradedValue==null?'<span class="missing">—</span>':`<span class="num">${numberFormat.format(stock.tradedValue/1e6)}</span>`}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.ytd)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.month3)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.month6)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.year1)}</td></tr>`;
+  return `<tr><td class="sticky-1"><span class="symbol-cell">${favoriteButton(stock)}<span class="symbol-badge">${escapeHtml(stock.symbol)}</span></span></td><td class="sticky-2 company-name">${companyLabel}</td><td title="${escapeHtml(priceTitle)}">${stock.price==null?'<span class="missing">—</span>':`<span class="num price">${numberFormat.format(stock.price)}</span>`}</td><td>${percent(stock.day)}</td><td title="${escapeHtml(stock._epsSource||'')}">${numeric(stock.eps,2)}</td><td>${pe(stock)}</td><td title="${escapeHtml(stock._bookSource||'')}">${numeric(stock.bookValue)}</td><td>${pb(stock)}</td><td title="${escapeHtml(dividendTitle)}">${percent(stock.dividendYield,false)}</td><td>${range52(stock)}</td><td title="${escapeHtml(`القيمة السوقية بمليار دولار · ${priceTitle}`)}">${numeric(stock.marketCap)}</td><td title="${escapeHtml(`القيمة المتداولة بمليون دولار · ${priceTitle}`)}">${stock.tradedValue==null?'<span class="missing">—</span>':`<span class="num">${numberFormat.format(stock.tradedValue/1e6)}</span>`}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.ytd)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.month3)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.month6)}</td><td title="${escapeHtml(performanceTitle)}">${percent(stock.year1)}</td></tr>`;
 }
 function matches(stock){
   if(!query)return true;
