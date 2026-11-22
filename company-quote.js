@@ -72,9 +72,15 @@
   const loadSession = symbol => {
     const lq = window.LiveQuotes;
     if (!lq?.enabled) return Promise.resolve(null);
-    // لا يُحفظ الفشل: تعاد المحاولة عند فتح الشركة مرة أخرى
-    if (!sessionCache.has(symbol)) sessionCache.set(symbol, Promise.resolve(lq.session(symbol)).then(d => d?.ticks?.length > 1 ? d : null).catch(() => null)
-      .then(d => { if (!d) sessionCache.delete(symbol); return d; }));
+    // صفقات ناسداك تصل فارغة في نحو نصف الطلبات: حتى خمس محاولات، ولا يُحفظ الفشل فيعاد الطلب عند اختيار المدة لاحقًا
+    const attempt = async () => {
+      for (let i = 0; i < 5; i++) {
+        try { const d = await lq.session(symbol); if (d?.ticks?.length > 1) return d; } catch { /* المحاولة التالية */ }
+        if (i < 4) await new Promise(resolve => setTimeout(resolve, 700 * (i + 1)));
+      }
+      return null;
+    };
+    if (!sessionCache.has(symbol)) sessionCache.set(symbol, attempt().then(d => { if (!d) sessionCache.delete(symbol); return d; }));
     return sessionCache.get(symbol);
   };
   // صفقات الجلسة العادية (9:30 – 16:00 بتوقيت نيويورك) مجمّعة في شموع 5 دقائق.
@@ -90,11 +96,7 @@
       if (b) { b.h = Math.max(b.h, price); b.l = Math.min(b.l, price); b.c = price; }
       else buckets.set(slot, { o: price, h: price, l: price, c: price, day, hm: `${String(Math.floor(slot / 60)).padStart(2, '0')}:${String(slot % 60).padStart(2, '0')}` });
     }
-    const points = [...buckets.keys()].sort((a, b) => a - b).map(k => buckets.get(k));
-    // آخر نقطة = آخر سعر للجلسة (سعر الإغلاق الرسمي بعد المزاد، أو آخر صفقة أثناء الجلسة) ليطابق بطاقة السعر
-    const last = points.at(-1), close = num(session.close);
-    if (last && close > 0) { last.c = close; last.h = Math.max(last.h, close); last.l = Math.min(last.l, close); }
-    return points;
+    return [...buckets.keys()].sort((a, b) => a - b).map(k => buckets.get(k));
   }
 
   const MINI_EMPTY = '<p class="cq-empty cq-mini-empty">لا تتوفر شموع لهذا السهم بعد.</p>';
@@ -126,6 +128,12 @@
       series.forEach((p, i) => { p.first = i === 0 || series[i - 1].day !== p.day; });
       const previous = raw.filter(b => b.time < days[0]).at(-1);
       base = previous ? previous.close : num(session?.prevClose) ?? series[0].c;
+      // آخر نقطة: سعر الإغلاق الرسمي من الشموع اليومية إن وُجد لذلك اليوم، وأثناء الجلسة آخر سعر حي
+      // (لا يُستخدم سعر ما بعد الإغلاق، فيطابق التغير اليومي الرسمي)
+      const tail = series.at(-1), official = raw.at(-1).time === tail.day ? raw.at(-1).close : null;
+      const live = official == null && session?.date === tail.day && /^open$/i.test(session?.status || '') ? num(session.close) : null;
+      const close = official ?? live;
+      if (close > 0) { tail.c = close; tail.h = Math.max(tail.h, close); tail.l = Math.min(tail.l, close); }
       intra = true;
     } else if (range.sessions) {
       // بلا شموع دقائق: إغلاقات يومية لآخر الجلسات، تبدأ من إغلاق الجلسة التي قبلها (لا يُعرض التاريخ كله أبدًا)
@@ -303,10 +311,12 @@
     };
     render();
     // جلسة اليوم تصل لاحقًا (لا ننتظرها): يُعاد الرسم إن كانت المدة المختارة يومًا أو خمسة أيام
-    sessionPromise.then(value => {
+    const useSession = promise => promise.then(value => {
+      if (!value || session) return;
       session = value;
-      if (value && shown === symbol && slot.isConnected && MINI_RANGES.find(r => r.id === miniRange)?.sessions) render();
+      if (shown === symbol && slot.isConnected && MINI_RANGES.find(r => r.id === miniRange)?.sessions) render();
     });
+    useSession(sessionPromise);
     // تغيير المدة يعيد رسم الشارت الصغير فقط
     slot.addEventListener('click', event => {
       const b = event.target.closest('[data-mini-range]');
@@ -314,6 +324,7 @@
       event.preventDefault();
       miniRange = b.dataset.miniRange;
       render();
+      if (!session && MINI_RANGES.find(r => r.id === miniRange)?.sessions) useSession(loadSession(symbol));
     });
   }
 
