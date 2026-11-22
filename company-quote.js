@@ -67,11 +67,41 @@
   const NY_PARTS = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const riyadh = epoch => { const p = Object.fromEntries(NY_PARTS.formatToParts(new Date(epoch * 1000)).map(x => [x.type, x.value])); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; };
 
+  // جلسة اليوم (أو آخر جلسة) من وسيط الأسعار اللحظية: صفقات ناسداك دقيقة بدقيقة، تُستخدم لشارت «يوم» حين لا يوجد ملف intraday
+  const sessionCache = new Map();
+  const loadSession = symbol => {
+    const lq = window.LiveQuotes;
+    if (!lq?.enabled) return Promise.resolve(null);
+    // لا يُحفظ الفشل: تعاد المحاولة عند فتح الشركة مرة أخرى
+    if (!sessionCache.has(symbol)) sessionCache.set(symbol, Promise.resolve(lq.session(symbol)).then(d => d?.ticks?.length > 1 ? d : null).catch(() => null)
+      .then(d => { if (!d) sessionCache.delete(symbol); return d; }));
+    return sessionCache.get(symbol);
+  };
+  // صفقات الجلسة العادية (9:30 – 16:00 بتوقيت نيويورك) مجمّعة في شموع 5 دقائق.
+  // ختم الوقت عند ناسداك هو توقيت نيويورك الجداري مكتوبًا كأنه UTC، فيُقرأ بـ UTC مباشرة.
+  function sessionPoints(session) {
+    if (!session?.ticks?.length || !session.date) return [];
+    const buckets = new Map();
+    for (const [ms, price] of session.ticks) {
+      const iso = new Date(ms).toISOString(), day = iso.slice(0, 10), minutes = +iso.slice(11, 13) * 60 + +iso.slice(14, 16);
+      if (day !== session.date || minutes < 570 || minutes > 960 || !(price > 0)) continue;
+      const slot = Math.min(955, Math.floor(minutes / 5) * 5);
+      const b = buckets.get(slot);
+      if (b) { b.h = Math.max(b.h, price); b.l = Math.min(b.l, price); b.c = price; }
+      else buckets.set(slot, { o: price, h: price, l: price, c: price, day, hm: `${String(Math.floor(slot / 60)).padStart(2, '0')}:${String(slot % 60).padStart(2, '0')}` });
+    }
+    const points = [...buckets.keys()].sort((a, b) => a - b).map(k => buckets.get(k));
+    // آخر نقطة = آخر سعر للجلسة (سعر الإغلاق الرسمي بعد المزاد، أو آخر صفقة أثناء الجلسة) ليطابق بطاقة السعر
+    const last = points.at(-1), close = num(session.close);
+    if (last && close > 0) { last.c = close; last.h = Math.max(last.h, close); last.l = Math.min(last.l, close); }
+    return points;
+  }
+
   const MINI_EMPTY = '<p class="cq-empty cq-mini-empty">لا تتوفر شموع لهذا السهم بعد.</p>';
   const dmy = iso => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
   // سلسلة الشارت الصغير: للمدد الطويلة شموع يومية معدلة للتوزيعات (كما في ADJ)، وليوم وخمسة أيام شموع 5 دقائق
-  function miniSeries(file, rangeId, intraday) {
+  function miniSeries(file, rangeId, intraday, session) {
     const calc = window.CompanyChart?.calc;
     if (!calc || !file?.d?.length || file.d.length !== file.c?.length) return null;
     const raw = file.d.map((time, i) => {
@@ -82,18 +112,30 @@
     const bars = calc.adjustDividends(raw, dividends);
     const range = MINI_RANGES.find(r => r.id === rangeId) || MINI_RANGES[4];
     let series, base, intra = false;
-    if (range.sessions && intraday?.t?.length > 1) {
-      // آخر جلسات التداول في الملف، ونقطة الأساس إغلاق الجلسة السابقة لأول جلسة معروضة
-      const points = intraday.t.map((t, i) => {
-        const c = intraday.c[i], iso = riyadh(t);
-        return { o: intraday.o?.[i] ?? c, h: intraday.h?.[i] ?? c, l: intraday.l?.[i] ?? c, c, day: iso.slice(0, 10), hm: iso.slice(11, 16) };
-      });
+    // شموع 5 دقائق: من ملف intraday إن وُجد، وإلا جلسة اليوم من الوسيط اللحظي (تكفي لشارت «يوم» فقط)
+    let points = intraday?.t?.length > 1 ? intraday.t.map((t, i) => {
+      const c = intraday.c[i], iso = riyadh(t);
+      return { o: intraday.o?.[i] ?? c, h: intraday.h?.[i] ?? c, l: intraday.l?.[i] ?? c, c, day: iso.slice(0, 10), hm: iso.slice(11, 16) };
+    }) : [];
+    if (range.sessions === 1 && points.length < 2) points = sessionPoints(session);
+    const enoughIntraday = range.sessions && points.length > 1 && new Set(points.map(p => p.day)).size >= range.sessions;
+    if (enoughIntraday) {
+      // آخر جلسات التداول، ونقطة الأساس إغلاق الجلسة السابقة لأول جلسة معروضة
       const days = [...new Set(points.map(p => p.day))].slice(-range.sessions);
       series = points.filter(p => days.includes(p.day)).map(p => ({ ...p, label: range.sessions === 1 ? p.hm : `${dmy(p.day)} ${p.hm}`, full: `${dmy(p.day)}.${p.day.slice(0, 4)} ${p.hm}`, first: false }));
       series.forEach((p, i) => { p.first = i === 0 || series[i - 1].day !== p.day; });
       const previous = raw.filter(b => b.time < days[0]).at(-1);
-      base = previous ? previous.close : series[0].c;
+      base = previous ? previous.close : num(session?.prevClose) ?? series[0].c;
       intra = true;
+    } else if (range.sessions) {
+      // بلا شموع دقائق: إغلاقات يومية لآخر الجلسات، تبدأ من إغلاق الجلسة التي قبلها (لا يُعرض التاريخ كله أبدًا)
+      let daily = raw;
+      if (session?.date && num(session.close) > 0 && session.date > raw.at(-1).time) {
+        const c = session.close;
+        daily = [...raw, { time: session.date, open: num(session.open) ?? c, high: Math.max(num(session.high) ?? c, c), low: Math.min(num(session.low) ?? c, c), close: c }];
+      }
+      series = daily.slice(-(range.sessions + 1)).map(b => ({ o: b.open, h: b.high, l: b.low, c: b.close, day: b.time, label: dotDate(b.time), full: dotDate(b.time), first: false }));
+      base = series[0]?.c;
     } else {
       let shown = bars;
       if (range.months) {
@@ -123,7 +165,7 @@
     const ticks = [];
     if (intra && sessions === 1) series.forEach((p, i) => { if (p.hm.endsWith(':00') && i > 0 && i < n - 1) ticks.push([i, p.hm]); });
     else if (intra) series.forEach((p, i) => { if (p.first && i > 0) ticks.push([i, `${dmy(p.day)}`]); });
-    else [0, Math.round((n - 1) / 2), n - 1].forEach(i => ticks.push([i, series[i].label]));
+    else [...new Set([0, Math.round((n - 1) / 2), n - 1])].forEach(i => ticks.push([i, series[i].label]));
     const xTicks = ticks.map(([i, text]) => {
       const cls = i === 0 ? ' class="cq-mini-x-first"' : i === n - 1 ? ' class="cq-mini-x-last"' : '';
       return `<span${cls} style="left:${x(i).toFixed(2)}%">${text}</span>`;
@@ -250,14 +292,21 @@
     shown = symbol;
     box.innerHTML = card(stock);
     startLive(symbol, stock, box);
+    const sessionPromise = loadSession(symbol);
     const [ohlc, intraday] = await Promise.all([loadCandles(symbol), loadIntraday(symbol)]), slot = box.querySelector('.cq-mini-slot');
+    let session = null;
     if (shown !== symbol || !slot) return;
     const render = () => {
-      const data = miniSeries(ohlc, miniRange, intraday);
+      const data = miniSeries(ohlc, miniRange, intraday, session);
       slot.innerHTML = data ? miniHtml(symbol, miniRange, data) : MINI_EMPTY;
       if (data) bindMini(slot, data);
     };
     render();
+    // جلسة اليوم تصل لاحقًا (لا ننتظرها): يُعاد الرسم إن كانت المدة المختارة يومًا أو خمسة أيام
+    sessionPromise.then(value => {
+      session = value;
+      if (value && shown === symbol && slot.isConnected && MINI_RANGES.find(r => r.id === miniRange)?.sessions) render();
+    });
     // تغيير المدة يعيد رسم الشارت الصغير فقط
     slot.addEventListener('click', event => {
       const b = event.target.closest('[data-mini-range]');
