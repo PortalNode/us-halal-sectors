@@ -202,15 +202,67 @@ import { PERIODS, QUARTER_NAMES, METRICS as QMETRICS, periodRange, periodUnit, q
   function drawBars(title, items, kind) {
     $('bank-charts-context').textContent = title;
     if (!items.length) { $('bank-charts-grid').innerHTML = '<p class="financial-status">لا تتوفر بيانات لهذا البند.</p>'; return; }
+    $('bank-charts-grid').innerHTML = barChart(items, kind, title);
+  }
+
+  // أعمدة المقارنة (بأسلوب el7): تدرّج يتلاشى للأسفل، آخر فترة مميّزة بتوهّج، شبكة منقّطة بمحور قيم،
+  // ونسبة التغير عن الفترة السابقة فوق كل عمود، وملخص التغير الكلي أعلى البطاقة.
+  // items: [{ label, value, tip? }] من الأقدم إلى الأحدث. kind: money | ps | pct | percent
+  function barChart(items, kind, ariaLabel) {
+    const pctKind = kind === 'pct' || kind === 'percent';
+    const text = v => (kind === 'money' ? f0.format(v) : f2.format(v)) + (pctKind ? '%' : '');
+    const tickText = v => (kind === 'money' ? f0 : new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })).format(v) + (pctKind ? '%' : '');
+    const delta = (cur, prev) => {
+      if (cur == null || prev == null) return null;
+      if (pctKind) { const d = cur - prev; return { d, t: `${d > 0 ? '+' : ''}${f2.format(d)} ن.م.` }; }
+      if (prev === 0) return null;
+      const d = (cur - prev) / Math.abs(prev) * 100;
+      return { d, t: `${d > 0 ? '+' : ''}${f2.format(d)}%` };
+    };
     const vals = items.map(x => x.value);
-    const max = Math.max(0, ...vals), min = Math.min(0, ...vals), span = max - min || 1;
-    const W = 560, H = 240, pad = 34, gap = (W - pad * 2) / items.length, bw = Math.min(70, gap - 12), y = v => pad + (max - v) / span * (H - pad * 2);
-    const text = v => kind === 'money' ? f0.format(v) : f2.format(v) + (kind === 'percent' ? '%' : '');
-    const out = items.map((item, k) => {
-      const v = item.value, x = pad + gap * k + (gap - bw) / 2, top = y(Math.max(v, 0)), h = Math.abs(y(v) - y(0));
-      return `<g><rect x="${x}" y="${top}" width="${bw}" height="${Math.max(h, 1)}" rx="3" fill="${v < 0 ? 'var(--red)' : 'var(--teal)'}"><title>${esc(item.label)}: ${text(v)}</title></rect><text x="${x + bw / 2}" y="${v < 0 ? top + h + 14 : top - 6}" text-anchor="middle" font-size="12" fill="currentColor">${text(v)}</text><text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="${items.length > 6 ? 10 : 12}" fill="currentColor" opacity=".7">${esc(item.label)}</text></g>`;
+    // على الشاشات الضيقة نرسم بعرض أصغر حتى يبقى النص مقروءًا بعد التصغير
+    const narrow = ($('bank-charts-grid')?.clientWidth || window.innerWidth) < 600;
+    const W = narrow ? 420 : 760, H = narrow ? 320 : 300, padL = 8, padR = narrow ? 46 : 62, padT = 62, padB = 36;
+    const max = Math.max(0, ...vals), min = Math.min(0, ...vals);
+    const raw = (max - min || 1) / 4, mag = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(v => v >= raw - 1e-9);
+    const hi = Math.ceil(max / step - 1e-9) * step || step, lo = Math.floor(min / step + 1e-9) * step, span = hi - lo || 1;
+    const y = v => padT + (hi - v) / span * (H - padT - padB);
+    const ticks = []; for (let t = lo; t <= hi + step / 2; t += step) ticks.push(Math.round(t / step) * step);
+    const plotW = W - padL - padR, gap = plotW / items.length, bw = Math.min(66, gap * 0.6), last = items.length - 1;
+    // كثرة الأعمدة (الأرباع المتتالية): نخفي نسب التغير ثم القيم عدا الأخيرة، ونصغّر تسميات الفترات
+    const showChips = gap >= 58, showVals = gap >= 40, xSize = gap >= 52 ? 12 : gap >= 34 ? 10 : 8.5;
+    const grid = ticks.map(t => `<line class="e7c-grid${t === 0 ? ' e7c-zero' : ''}" x1="${padL}" x2="${W - padR + 4}" y1="${y(t)}" y2="${y(t)}"/><text class="e7c-ytick" x="${W - padR + 10}" y="${y(t) + 4}">${tickText(t)}</text>`).join('');
+    const path = (x, top, w, h, up) => {
+      const r = Math.min(8, w / 2, h);
+      return up
+        ? `M${x},${top + h}V${top + r}Q${x},${top} ${x + r},${top}H${x + w - r}Q${x + w},${top} ${x + w},${top + r}V${top + h}Z`
+        : `M${x},${top}V${top + h - r}Q${x},${top + h} ${x + r},${top + h}H${x + w - r}Q${x + w},${top + h} ${x + w},${top + h - r}V${top}Z`;
+    };
+    const bars = items.map((item, k) => {
+      const v = item.value, up = v >= 0, x = padL + gap * k + (gap - bw) / 2, cx = x + bw / 2;
+      const top = y(Math.max(v, 0)), h = Math.max(Math.abs(y(v) - y(0)), 1.5), isLast = k === last;
+      const ch = k > 0 && !pctKind ? delta(v, items[k - 1].value) : null; // الهوامش والنسب: بلا نسبة تغير
+      const valY = up ? top - 10 : top + h + 17;
+      const chipY = up ? top - 38 : y(0) - 24; // للأعمدة السالبة: النسبة فوق خط الصفر بعيدًا عن تسمية الفترة
+      const chip = ch && showChips ? (() => { const w = ch.t.length * 6.3 + 14; return `<g class="e7c-chip ${ch.d > 0 ? 'up' : ch.d < 0 ? 'down' : 'flat'}"><rect x="${cx - w / 2}" y="${chipY}" width="${w}" height="17" rx="8.5"/><text x="${cx}" y="${chipY + 12.5}">${ch.t}</text></g>`; })() : '';
+      const tip = `${item.label}: ${item.tip ?? text(v)}${ch ? ` (${ch.t})` : ''}`;
+      return `<g class="e7c-bar${isLast ? ' is-last' : ''}${up ? '' : ' is-neg'}" style="--i:${k}"><title>${esc(tip)}</title>`
+        + `<rect class="e7c-hit" x="${padL + gap * k}" y="${padT - 40}" width="${gap}" height="${H - padT + 40 - padB}"/>`
+        + `<path class="e7c-fill" d="${path(x, top, bw, h, up)}" fill="url(#e7c-${up ? 'up' : 'down'}${isLast ? '-last' : ''})"${isLast && up ? ' filter="url(#e7c-glow)"' : ''}/>`
+        + `<rect class="e7c-cap" x="${x + 3}" y="${up ? top : top + h - 3}" width="${Math.max(bw - 6, 1)}" height="3" rx="1.5"/>`
+        + (showVals || isLast ? `<text class="e7c-val" x="${cx}" y="${valY}">${text(v)}</text>` : '') + chip
+        + `<text class="e7c-x" x="${cx}" y="${H - 10}" font-size="${xSize}">${esc(item.label)}</text></g>`;
     }).join('');
-    $('bank-charts-grid').innerHTML = `<div class="bank-chart-card" style="padding:12px"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}" style="width:100%;height:auto;max-height:320px;direction:ltr"><line x1="${pad}" x2="${W - pad}" y1="${y(0)}" y2="${y(0)}" stroke="currentColor" opacity=".25"/>${out}</svg></div>`;
+    const stops = (id, a, b, flip) => `<linearGradient id="${id}" x1="0" y1="${flip ? 1 : 0}" x2="0" y2="${flip ? 0 : 1}"><stop offset="0" class="${a}"/><stop offset="1" class="${b}"/></linearGradient>`;
+    const defs = `<defs>${stops('e7c-up', 'e7c-up-a', 'e7c-up-b')}${stops('e7c-up-last', 'e7c-upl-a', 'e7c-upl-b')}${stops('e7c-down', 'e7c-dn-a', 'e7c-dn-b', true)}${stops('e7c-down-last', 'e7c-dnl-a', 'e7c-dnl-b', true)}<filter id="e7c-glow" x="-50%" y="-20%" width="200%" height="140%"><feDropShadow dx="0" dy="0" stdDeviation="7" class="e7c-glow"/></filter></defs>`;
+    // الملخص: التغير من أول فترة إلى آخرها، وأعلى قيمة
+    const total = items.length > 1 && !pctKind ? delta(vals[last], vals[0]) : null;
+    const best = items.reduce((a, b) => (b.value > a.value ? b : a), items[0]);
+    const pills = `${total ? `<span class="e7c-pill ${total.d > 0 ? 'up' : total.d < 0 ? 'down' : ''}"><i></i>من ${esc(items[0].label)} إلى ${esc(items[last].label)}: <bdi>${total.t}</bdi></span>` : ''}`
+      + `<span class="e7c-pill gold"><i></i>آخر قيمة: <bdi>${text(vals[last])}</bdi></span>`
+      + (items.length > 2 ? `<span class="e7c-pill"><i></i>الأعلى: ${esc(best.label)} · <bdi>${text(best.value)}</bdi></span>` : '');
+    return `<div class="bank-chart-card e7c" style="padding:12px"><div class="e7c-head">${pills}</div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(ariaLabel)}" style="width:100%;height:auto;max-height:380px;direction:ltr">${defs}${grid}${bars}</svg></div>`;
   }
 
   function periodBars() {
@@ -245,15 +297,8 @@ import { PERIODS, QUARTER_NAMES, METRICS as QMETRICS, periodRange, periodUnit, q
     const idx = labels.map((_, i) => i).reverse().filter(i => s[i] != null);
     $('bank-charts-context').textContent = `${metric[1]} · ${metric[2] === 'money' ? 'مليون دولار' : metric[2] === 'ps' ? 'دولار للسهم' : 'نسبة مئوية'} · ${state.period === 'q' ? 'ربعي' : 'سنوي'}`;
     if (!idx.length) { $('bank-charts-grid').innerHTML = '<p class="financial-status">لا تتوفر بيانات لهذا البند.</p>'; return; }
-    const vals = idx.map(i => metric[2] === 'money' ? s[i] / 1e6 : s[i]);
-    const max = Math.max(0, ...vals), min = Math.min(0, ...vals), span = max - min || 1;
-    const W = 560, H = 240, pad = 34, gap = (W - pad * 2) / idx.length, bw = Math.min(70, gap - 12), y = v => pad + (max - v) / span * (H - pad * 2);
-    const out = idx.map((i, k) => {
-      const v = vals[k], x = pad + gap * k + (gap - bw) / 2, top = y(Math.max(v, 0)), h = Math.abs(y(v) - y(0));
-      const color = v < 0 ? 'var(--red)' : 'var(--teal)';
-      return `<g><rect x="${x}" y="${top}" width="${bw}" height="${Math.max(h, 1)}" rx="3" fill="${color}"><title>${esc(labelOf(labels[i]))}: ${plain(s[i], metric[2])}</title></rect><text x="${x + bw / 2}" y="${v < 0 ? top + h + 14 : top - 6}" text-anchor="middle" font-size="12" fill="currentColor">${metric[2] === 'money' ? f0.format(v) : f2.format(v)}${metric[2] === 'pct' ? '%' : ''}</text><text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="${state.period === 'q' ? 10 : 12}" fill="currentColor" opacity=".7">${esc(labelOf(labels[i]))}</text></g>`;
-    }).join('');
-    $('bank-charts-grid').innerHTML = `<div class="bank-chart-card" style="padding:12px"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(metric[1])}" style="width:100%;height:auto;max-height:320px;direction:ltr"><line x1="${pad}" x2="${W - pad}" y1="${y(0)}" y2="${y(0)}" stroke="currentColor" opacity=".25"/>${out}</svg></div>`;
+    const items = idx.map(i => ({ label: labelOf(labels[i]), value: metric[2] === 'money' ? s[i] / 1e6 : s[i], tip: plain(s[i], metric[2]) }));
+    $('bank-charts-grid').innerHTML = barChart(items, metric[2], metric[1]);
   }
 
   function show(symbol, { push = true } = {}) {

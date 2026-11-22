@@ -516,3 +516,48 @@ html body .pf-dialog{border-radius:var(--e7-r)}
 html body .pf-tabs,html body .pf-mode{border-radius:12px;overflow:hidden}
 html body .pf-field input,html body .pf-search input,html body .pf-limit input{border-radius:10px}
 html body .pf-quick button,html body .pf-confirm,html body .pf-mini,html body .pf-cancel-btn{border-radius:10px}
+
+/* ---------------- أعمدة المقارنة (company.js → barChart) ---------------- */
+.e7c{--e7c-up:var(--pf-gold);--e7c-up-hi:#fbbf24;--e7c-dn:var(--cq-down,#f05252)}
+:root[data-theme="light"] .e7c{--e7c-up-hi:#f59e0b}
+.e7c-head{display:flex;flex-wrap:wrap;gap:6px 8px;margin:2px 4px 6px}
+.e7c-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--pf-muted);background:var(--e7-tile,transparent);border:1px solid var(--pf-line)}
+.e7c-pill i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.e7c-pill bdi{direction:ltr;color:var(--pf-ink);font-variant-numeric:tabular-nums}
+.e7c-pill.up{color:var(--cq-up,#22c55e);background:color-mix(in srgb,var(--cq-up,#22c55e) 10%,transparent);border-color:color-mix(in srgb,var(--cq-up,#22c55e) 35%,transparent)}
+.e7c-pill.down{color:var(--cq-down,#f05252);background:color-mix(in srgb,var(--cq-down,#f05252) 10%,transparent);border-color:color-mix(in srgb,var(--cq-down,#f05252) 35%,transparent)}
+.e7c-pill.up bdi,.e7c-pill.down bdi{color:inherit}
+.e7c-pill.gold{color:var(--pf-gold);background:var(--pf-gold-soft);border-color:color-mix(in srgb,var(--pf-gold) 35%,transparent)}
+.e7c svg{display:block;margin:0 auto;font-family:inherit;overflow:visible}
+.e7c-grid{stroke:var(--pf-muted);stroke-opacity:.22;stroke-dasharray:3 5}
+.e7c-zero{stroke-opacity:.5;stroke-dasharray:none}
+.e7c-ytick{fill:var(--pf-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.e7c-up-a{stop-color:var(--e7c-up);stop-opacity:.7}.e7c-up-b{stop-color:var(--e7c-up);stop-opacity:.06}
+.e7c-upl-a{stop-color:var(--e7c-up-hi);stop-opacity:1}.e7c-upl-b{stop-color:var(--e7c-up);stop-opacity:.22}
+.e7c-dn-a{stop-color:var(--e7c-dn);stop-opacity:.7}.e7c-dn-b{stop-color:var(--e7c-dn);stop-opacity:.06}
+.e7c-dnl-a{stop-color:var(--e7c-dn);stop-opacity:1}.e7c-dnl-b{stop-color:var(--e7c-dn);stop-opacity:.22}
+.e7c-glow{flood-color:var(--e7c-up);flood-opacity:.45}
+.e7c-cap{fill:var(--e7c-up);opacity:.85}
+.e7c-bar.is-neg .e7c-cap{fill:var(--e7c-dn)}
+.e7c-bar.is-last .e7c-cap{fill:var(--e7c-up-hi);opacity:1}
+.e7c-bar.is-last.is-neg .e7c-cap{fill:var(--e7c-dn)}
+.e7c-hit{fill:transparent}
+.e7c-val{fill:var(--pf-ink);font-size:13px;font-weight:800;text-anchor:middle;font-variant-numeric:tabular-nums}
+.e7c-bar:not(.is-last) .e7c-val{fill:color-mix(in srgb,var(--pf-ink) 80%,transparent)}
+.e7c-x{fill:var(--pf-muted);font-weight:600;text-anchor:middle}
+.e7c-bar.is-last .e7c-x{fill:var(--pf-gold);font-weight:800}
+.e7c-chip rect{fill:color-mix(in srgb,var(--pf-muted) 14%,transparent)}
+.e7c-chip text{font-size:10.5px;font-weight:800;text-anchor:middle;fill:var(--pf-muted);direction:ltr;unicode-bidi:plaintext}
+.e7c-chip.up rect{fill:color-mix(in srgb,var(--cq-up,#22c55e) 16%,transparent)}.e7c-chip.up text{fill:var(--cq-up,#22c55e)}
+.e7c-chip.down rect{fill:color-mix(in srgb,var(--cq-down,#f05252) 16%,transparent)}.e7c-chip.down text{fill:var(--cq-down,#f05252)}
+/* المرور: يبرز العمود ويخفت الباقي */
+.e7c-bar{transition:opacity .15s}
+.e7c svg:hover .e7c-bar:not(:hover){opacity:.45}
+.e7c-bar:hover .e7c-fill{filter:brightness(1.2)}
+/* ظهور الأعمدة بالتتابع */
+.e7c-fill,.e7c-cap{transform-box:fill-box;transform-origin:50% 100%;animation:e7c-grow .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 70ms)}
+.e7c-bar.is-neg .e7c-fill,.e7c-bar.is-neg .e7c-cap{transform-origin:50% 0}
+.e7c-val,.e7c-chip{animation:e7c-fade .4s ease both;animation-delay:calc(var(--i) * 70ms + .35s)}
+@keyframes e7c-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes e7c-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.e7c-fill,.e7c-cap,.e7c-val,.e7c-chip{animation:none}}
