@@ -430,7 +430,8 @@ async function refreshPrices(){
       if(first)for(const [symbol,quote]of first)live.cache.set(symbol,quote);
     }
     const realtimeApplied=applyLiveCache(data);
-    if(!LQ()&&snapshotNeedsLiveQuotes(data)){
+    // بلا أسعار لحظية مطبقة (الوسيط معطل أو لم يرد بعد): أسعار TradingView للجلسة الأخيرة بدل لقطة data.json القديمة
+    if(!realtimeApplied&&snapshotNeedsLiveQuotes(data)){
       try{
         const liveUpdated=await applyTradingViewLivePrices(data);
         // خارج الجلسة غياب سعر أحدث أمر طبيعي (عطلة نهاية الأسبوع أو عطلة رسمية).
@@ -463,7 +464,7 @@ const live={cache:new Map(),cursor:0,running:false,timer:null,baseIndex:null};
 const LQ=()=>globalThis.LiveQuotes?.enabled?globalThis.LiveQuotes:null;
 function applyLiveCache(snapshot){
   if(!snapshot?.sectors||!live.cache.size)return false;
-  let changed=0,turnover=0,turnoverStocks=0,date=null,status=null;
+  let changed=0,turnover=0,turnoverStocks=0,date=null,nasdaq=0,delayed=0;
   const stocks=snapshot.sectors.flatMap(sector=>sector.stocks);
   for(const stock of stocks){
     const quote=live.cache.get(stock.symbol);
@@ -472,22 +473,31 @@ function applyLiveCache(snapshot){
     if(Number.isFinite(quote.pct))stock.day=quote.pct;
     if(Number.isFinite(stock.shares)&&stock.shares>0)stock.marketCap=quote.price*stock.shares/1e9;
     if(Number.isFinite(quote.volume)&&quote.volume>0){stock.volume=Math.round(quote.volume);stock.tradedValue=quote.volume*quote.price;}
-    date=LiveQuotes.dateOf(quote)||date;status=quote.status||status;
+    date=LiveQuotes.dateOf(quote)||date;
     stock.priceDate=LiveQuotes.dateOf(quote)||stock.priceDate;
     stock.priceCheckedAt=new Date().toISOString();
-    stock.priceSource='Nasdaq';
-    stock.priceStatus=quote.status==='Closed'?'close':'realtime';
+    stock.priceSource=quote.source||'Nasdaq';
+    stock.priceStatus=quote.status==='Closed'?'close':quote.status==='Delayed'?'delayed':'realtime';
+    if(quote.source==='TradingView'){if(quote.status==='Delayed')delayed++;}else nasdaq++;
     stock._livePrice=true;
     changed++;
   }
   for(const stock of stocks){if(stock.tradedValue>0){turnover+=stock.tradedValue;turnoverStocks++;}}
   if(!changed)return false;
-  const mode=status==='Closed'?'close':'realtime',checkedAt=new Date().toISOString();
+  // ناسداك يُقبل في الجلسة العادية فقط؛ ما عداه إغلاق (أو سعر متأخر) من TradingView
+  const provider=nasdaq?'Nasdaq':'TradingView',status=nasdaq?'Open':delayed?'Delayed':'Closed';
+  const mode=status==='Closed'?'close':status==='Delayed'?'delayed':'realtime',checkedAt=new Date().toISOString();
   snapshot.marketStatus=status;
-  snapshot.priceSource={...snapshot.priceSource,provider:'Nasdaq',mode,observedDate:date||snapshot.priceSource?.observedDate,checkedAt,delayMinutes:null,live:true,liveSymbols:changed,warning:null};
+  snapshot.priceSource={...snapshot.priceSource,provider,mode,observedDate:date||snapshot.priceSource?.observedDate,checkedAt,delayMinutes:mode==='delayed'?15:null,live:true,liveSymbols:changed,warning:null,
+    ...(mode==='close'&&date?{officialDate:date}:{})};
   if(date){snapshot.priceDate=displayDate(date);snapshot.asOf=date;}
-  const spy=live.cache.get('SPY');
-  if(spy&&Number.isFinite(spy.pct)){
+  const spy=live.cache.get('SPY'),spx=live.cache.get('SPX');
+  // خارج الجلسة العادية: مؤشر S&P 500 نفسه من TradingView (إغلاقه وتغيره الرسمي) بدل تقديره من SPY
+  if(spx?.source==='TradingView'&&(!spy||spy.source==='TradingView')&&Number.isFinite(spx.pct)){
+    const spxDate=LiveQuotes.dateOf(spx);
+    snapshot.marketSummary={...snapshot.marketSummary,value:spx.price,pointChange:Number.isFinite(spx.change)?spx.change:spx.price-spx.price/(1+spx.pct/100),day:spx.pct,
+      date:displayDate(spxDate)||snapshot.marketSummary?.date,source:'TradingView',mode:spx.status==='Closed'?'close':'delayed',isIntraday:spx.status!=='Closed',updatedAt:checkedAt,indexEstimated:false};
+  }else if(spy&&Number.isFinite(spy.pct)){
     // ناسداك لا يعطي مؤشر S&P 500 نفسه: نقدّره من حركة صندوق SPY على إغلاق اليوم السابق.
     const m=snapshot.marketSummary||{};
     if(!live.baseIndex&&Number.isFinite(m.value)){
@@ -499,7 +509,7 @@ function applyLiveCache(snapshot){
       snapshot.marketSummary={...m,value,pointChange:value-live.baseIndex,day:spy.pct,date:displayDate(date)||m.date,source:'Nasdaq',mode,isIntraday:mode==='realtime',updatedAt:checkedAt,indexEstimated:true};
     }
   }
-  snapshot.marketSummary={...snapshot.marketSummary,turnover,turnoverSource:'Nasdaq',turnoverEstimated:true,turnoverStocks,turnoverUpdatedAt:checkedAt};
+  snapshot.marketSummary={...snapshot.marketSummary,turnover,turnoverSource:provider,turnoverEstimated:true,turnoverStocks,turnoverUpdatedAt:checkedAt};
   return true;
 }
 function paintLive(){

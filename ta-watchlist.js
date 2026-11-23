@@ -274,8 +274,12 @@
       s._live = true; s._closed = q.status === 'Closed'; s._time = String(q.time || '').replace(/^[A-Z][a-z]{2} \d{1,2}, \d{4}\s*/, '');
       changed = true;
     }
-    const spy = quotes.get('SPY');
-    if (index && summary && spy && Number.isFinite(spy.pct) && Number.isFinite(summary.value)) {
+    const spy = quotes.get('SPY'), spx = quotes.get('SPX');
+    // خارج الجلسة العادية يعطي live.js مؤشر S&P 500 نفسه من TradingView فلا حاجة لتقديره من SPY
+    if (index && spx?.source === 'TradingView' && (!spy || spy.source === 'TradingView') && Number.isFinite(spx.pct)) {
+      Object.assign(index, { price: spx.price, day: spx.pct, pointChange: Number.isFinite(spx.change) ? spx.change : undefined, estimated: false, priceDate: LQ.dateOf(spx) || index.priceDate });
+      changed = true;
+    } else if (index && summary && spy && Number.isFinite(spy.pct) && Number.isFinite(summary.value)) {
       if (!baseIndex) {
         const snapDate = summary.performanceDate, spyDate = LQ.dateOf(spy);
         baseIndex = spyDate && snapDate && spyDate > snapDate ? summary.value : summary.value / (1 + (summary.day || 0) / 100);
