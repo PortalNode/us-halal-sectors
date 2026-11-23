@@ -1,4 +1,5 @@
-// صفحة «التحليل الفني»: «مفاتيح جودة السهم» وقائمة المراقبة وشارت السهم (company-chart.js) في صفحة واحدة.
+// صفحة «التحليل الفني»: «مفاتيح جودة السهم» وقائمة المراقبة وشارت السهم (company-chart.js) في صفحة واحدة،
+// وبجوار الشارت قائمة مراقبة جانبية حسب القطاع (ta-watchlist.js) كما في TradingView.
 // السهم من ?symbol= في الرابط (أو SPX لمؤشر S&P 500 المرجعي)؛ وإن لم يوجد أو لم يكن في القائمة يُعرض أكبر سهم قيمة سوقية.
 // الصفحة تُفتح على الشارت، وعلى الماسح أو المراقبة إن جاء الرابط بـ #scanner أو #watch (دون ?symbol=).
 // اختيار سهم آخر يتم من زر البحث داخل الشارت نفسه.
@@ -21,7 +22,8 @@
     }
     throw new Error('data.json unavailable');
   };
-  const ready = fetchData().then(data => {
+  const dataReady = fetchData();
+  const ready = dataReady.then(data => {
     stocks = new Map(data.sectors.flatMap(sector => sector.stocks).map(stock => [String(stock.symbol), stock]));
     return stocks;
   }).catch(error => {
@@ -45,7 +47,8 @@
     const file = await window.CompanyChart.load(symbol);
     if (!file) { fail(`تعذر تحميل شموع ${symbol}. جرّب إعادة تحميل الصفحة بعد قليل.`); return false; }
     document.getElementById('ta-status')?.remove();
-    window.CompanyChart.mount(panel, file, { home: { symbol, file, name: stock.name }, levels });
+    // keepFull: تبديل السهم من قائمة المراقبة وهي في ملء الشاشة لا يخرج منه
+    window.CompanyChart.mount(panel, file, { home: { symbol, file, name: stock.name }, levels, keepFull: panel.classList.contains('cc-full') });
     mounted = symbol;
     return true;
   }
@@ -58,7 +61,7 @@
     if (name === 'chart' && mount && !mounted) mountChart(params.get('symbol'));
   }
 
-  const api = { ready, mountChart, setTab, current: () => mounted, chartPanel: panel };
+  const api = { ready, dataReady: dataReady.catch(() => null), mountChart, setTab, current: () => mounted, chartPanel: panel };
   window.TA = api;
 
   function start() {
