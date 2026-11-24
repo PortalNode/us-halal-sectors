@@ -7,7 +7,8 @@
   * quote/<الرمز>/chart        بدايات 2010 حتى ما قبل ذلك، معدّلة للتجزئة أيضًا
 لا نطبّق أي تعديل للتجزئة هنا: كشف التجزئة من القفزات السعرية كان يخلق تعديلات خاطئة (قفزة أرباح تُحسب تجزئة 1.5:1)
 فتختلف الشموع عن TradingView. الشموع هنا معدّلة للتجزئة وغير معدّلة للتوزيعات، وهو الوضع الافتراضي في TradingView.
-المؤشر S&P 500 من Cboe (بلا حجم).
+المؤشر S&P 500 من Cboe (بلا حجم)، وتُضاف إليه شمعة كل جلسة من TradingView (marketSummary.ohlc) متى كانت أحدث،
+لأن Cboe يحجب الطلبات الآلية منذ نوفمبر 2026.
 
 ohlc/<الرمز>.json          الجلسات الحديثة (بعد حد التاريخ historyThrough)، يتحدث يوميًا
 ohlc/history/<الرمز>.json  ما قبل ذلك منذ 2010، يُكتب عند غيابه أو تغيّر حد التاريخ (مرة كل سنة) أو عند ظهور تجزئة جديدة
@@ -119,12 +120,12 @@ def cboe_index():
     return clean(rows)
 
 
-def index_fallback(history, recent, bar):
-    """الشموع المخزنة للمؤشر + شمعة اليوم من data.json (marketSummary.ohlc) إن كانت أحدث وكاملة."""
-    rows = (rows_of(history) if history else []) + rows_of(recent)
+def with_session_bar(rows, bar):
+    """يضيف شمعة آخر جلسة للمؤشر من data.json (marketSummary.ohlc، من TradingView) إن كانت أحدث وكاملة.
+    يرجع (الشموع، هل أُضيفت)."""
     if bar and all(bar.get(k) for k in ("open", "high", "low", "close")) and (not rows or bar["date"] > rows[-1][0]):
-        rows.append((bar["date"], bar["open"], bar["high"], bar["low"], bar["close"], 0))
-    return clean(rows)
+        return clean(rows + [(bar["date"], bar["open"], bar["high"], bar["low"], bar["close"], 0)]), True
+    return rows, False
 
 
 def pack(symbol, rows, source, official_through, dividends=None, history_through=None):
@@ -230,10 +231,17 @@ def main():
         if is_index:
             rows, how = cboe_index(), "Cboe (مؤشر S&P 500)"
             if not rows and old_recent:
-                # Cboe غير متاح الآن: نُبقي المخزّن ونضيف شمعة آخر جلسة من TradingView إن توفرت (قد تبقى فجوة حتى يعود Cboe)
-                rows, how = index_fallback(old_history, old_recent, data["marketSummary"].get("ohlc")), "Cboe + TradingView (آخر جلسة)"
-                if rows and old_recent["d"][-1] < data["asOf"] and rows[-1][0] != data["asOf"]:
-                    print("تنبيه: لا شمعة للمؤشر لجلسة", data["asOf"])
+                # Cboe يحجب الطلبات الآلية (403 منذ 19 نوفمبر 2026): نُبقي الشموع المخزنة
+                rows, how = clean((rows_of(old_history) if old_history else []) + rows_of(old_recent)), "Cboe + TradingView"
+            # شمعة آخر جلسة من TradingView تُضاف دائمًا متى كانت أحدث، سواء جاء Cboe متأخرًا أو تعذر
+            previous = rows[-1][0] if rows else None
+            rows, added = with_session_bar(rows, data["marketSummary"].get("ohlc"))
+            if added and "TradingView" not in how:
+                how += " + TradingView"
+            if added and previous and (datetime.strptime(rows[-1][0], "%Y-%m-%d") - datetime.strptime(previous, "%Y-%m-%d")).days > 4:
+                print(f"تنبيه: فجوة في شموع المؤشر بين {previous} و{rows[-1][0]} (تحتاج ملئًا يدويًا)")
+            if rows and rows[-1][0] < data["asOf"]:
+                print("تنبيه: لا شمعة للمؤشر لجلسة", data["asOf"])
         else:
             rows, how = [], "Nasdaq (معدّل للتجزئة)"
             for cls in ("stocks", "etf"):
