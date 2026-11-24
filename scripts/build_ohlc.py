@@ -12,6 +12,10 @@
 ohlc/<الرمز>.json          الجلسات الحديثة (بعد حد التاريخ historyThrough)، يتحدث يوميًا
 ohlc/history/<الرمز>.json  ما قبل ذلك منذ 2010، يُكتب عند غيابه أو تغيّر حد التاريخ (مرة كل سنة) أو عند ظهور تجزئة جديدة
 
+التحديث اليومي سريع: إن كانت الشموع متأخرة عن إغلاق data.json يجلب آخر 45 يومًا فقط لكل سهم ويدمجها، فإن اختلف أي
+إغلاق مشترك بأكثر من 0.3% (تجزئة جديدة) أعاد بناء الشموع الكاملة لذلك السهم. وإن كانت الشموع حديثة لا يفعل شيئًا،
+فيصلح تشغيله في كل دورة تحديث بعد الإغلاق.
+
     python3 scripts/build_ohlc.py              # كل الأسهم
     python3 scripts/build_ohlc.py AAPL MSFT    # أسهم محددة
     python3 scripts/build_ohlc.py --full       # يعيد كتابة ملفات التاريخ كلها
@@ -71,8 +75,8 @@ def clean(rows):
     return [by_date[d] for d in sorted(by_date)]
 
 
-def nasdaq_recent(symbol, cls, end):
-    data = get_json(HISTORICAL.format(sym=symbol, cls=cls, start=START, end=end))
+def nasdaq_recent(symbol, cls, end, start=START):
+    data = get_json(HISTORICAL.format(sym=symbol, cls=cls, start=start, end=end))
     table = ((data or {}).get("data") or {}).get("tradesTable") or {}
     rows = []
     for x in table.get("rows") or []:
@@ -115,6 +119,14 @@ def cboe_index():
     return clean(rows)
 
 
+def index_fallback(history, recent, bar):
+    """الشموع المخزنة للمؤشر + شمعة اليوم من data.json (marketSummary.ohlc) إن كانت أحدث وكاملة."""
+    rows = (rows_of(history) if history else []) + rows_of(recent)
+    if bar and all(bar.get(k) for k in ("open", "high", "low", "close")) and (not rows or bar["date"] > rows[-1][0]):
+        rows.append((bar["date"], bar["open"], bar["high"], bar["low"], bar["close"], 0))
+    return clean(rows)
+
+
 def pack(symbol, rows, source, official_through, dividends=None, history_through=None):
     out = {"symbol": symbol, "source": source, "officialThrough": official_through, "est": [],
            "div": dividends or [], "flags": []}
@@ -153,6 +165,22 @@ def history_matches(history, fresh):
     return bool(shared) and all(abs(a / b - 1) <= 0.003 for a, b in shared if b)
 
 
+def rows_of(file):
+    return list(zip(file["d"], file["o"], file["h"], file["l"], file["c"], file["v"]))
+
+
+def merge_recent(old_rows, fresh):
+    """الشموع المخزنة حتى يوم قبل أول يوم جُلب + الشموع المجلوبة، بشرط تطابق الإغلاقات المشتركة (وإلا None = تجزئة جديدة)."""
+    if not fresh:
+        return None
+    stored = {r[0]: r[4] for r in old_rows}
+    shared = [(stored[r[0]], r[4]) for r in fresh if r[0] in stored]
+    if not shared or any(abs(a / b - 1) > 0.003 for a, b in shared if b):
+        return None
+    first = fresh[0][0]
+    return [r for r in old_rows if r[0] < first] + fresh
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     full = "--full" in sys.argv
@@ -164,14 +192,48 @@ def main():
     now = datetime.now(NY)
     boundary = history_boundary(now)
     end = now.strftime("%Y-%m-%d")
-    missing, rewritten = [], 0
+    missing, rewritten, incremental = [], 0, 0
+    if not args and not full:
+        if mode != "close":
+            print("الجلسة جارية: لا تحديث للشموع قبل الإغلاق")
+            return
+        stale = []
+        for symbol in symbols:
+            file = read(os.path.join(ROOT, "ohlc", f"{symbol}.json"))
+            if not file or not file.get("d") or file["d"][-1] < data["asOf"]:
+                stale.append(symbol)
+        if not stale:
+            print(f"الشموع حديثة حتى {data['asOf']}")
+            return
+        symbols = stale
     for symbol in symbols:
         is_index = symbol == INDEX_SYMBOL
         path = os.path.join(ROOT, "ohlc", f"{symbol}.json")
         hist_path = os.path.join(ROOT, "ohlc", "history", f"{symbol}.json")
         old_recent, old_history = read(path), read(hist_path)
+        # مسار سريع: آخر 45 يومًا فقط تُدمج في الشموع المخزنة
+        if (not full and not is_index and old_recent and old_history and old_recent.get("historyThrough") == boundary
+                and old_recent.get("d")):
+            since = (now - timedelta(days=45)).strftime("%Y-%m-%d")
+            for cls in ("stocks", "etf"):
+                fresh = nasdaq_recent(symbol, cls, end, since)
+                time.sleep(0.3)
+                if fresh:
+                    break
+            merged = merge_recent([r for r in rows_of(old_recent)], fresh)
+            if merged:
+                source = old_recent.get("source", "").split(" · ")[0] + " · " + ("إغلاق الجلسة" if mode == "close" else "شموع متأخرة")
+                through = merged[-1][0] if mode == "close" else (merged[-2][0] if len(merged) > 1 else merged[-1][0])
+                dump(path, pack(symbol, merged, source, through, old_recent.get("div") or [], history_through=boundary))
+                incremental += 1
+                continue
         if is_index:
             rows, how = cboe_index(), "Cboe (مؤشر S&P 500)"
+            if not rows and old_recent:
+                # Cboe غير متاح الآن: نُبقي المخزّن ونضيف شمعة آخر جلسة من TradingView إن توفرت (قد تبقى فجوة حتى يعود Cboe)
+                rows, how = index_fallback(old_history, old_recent, data["marketSummary"].get("ohlc")), "Cboe + TradingView (آخر جلسة)"
+                if rows and old_recent["d"][-1] < data["asOf"] and rows[-1][0] != data["asOf"]:
+                    print("تنبيه: لا شمعة للمؤشر لجلسة", data["asOf"])
         else:
             rows, how = [], "Nasdaq (معدّل للتجزئة)"
             for cls in ("stocks", "etf"):
@@ -209,7 +271,7 @@ def main():
         has_history = keep_history or bool(history_rows)
         dump(path, pack(symbol, recent_rows, source, through, [d for d in dividends if d[0] > boundary],
                         history_through=(boundary if has_history else None)))
-    print(f"تم: {len(symbols) - len(missing)}/{len(symbols)} · الجلسة الأخيرة {data['asOf']} · ملفات تاريخ أُعيدت كتابتها: {rewritten}")
+    print(f"تم: {len(symbols) - len(missing)}/{len(symbols)} · الجلسة الأخيرة {data['asOf']} · ملفات تاريخ أُعيدت كتابتها: {rewritten} · تحديث سريع: {incremental}")
     if missing:
         print("بلا شموع:", missing)
 

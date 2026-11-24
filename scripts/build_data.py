@@ -42,7 +42,7 @@ COLS = [
     "book_value_per_share_fq", "dividends_yield_current",
     "price_52_week_high", "price_52_week_low",
     "Perf.YTD", "Perf.3M", "Perf.6M", "Perf.Y",
-    "total_shares_outstanding_fundamental", "time", "update_mode",
+    "total_shares_outstanding_fundamental", "time", "update_mode", "open", "high", "low",
     # بيانات صفحة النتائج
     "fiscal_period_current", "total_revenue_ttm", "net_income_ttm", "gross_margin_ttm", "operating_margin_ttm",
     "net_margin_ttm", "return_on_equity_fq", "debt_to_equity_fq", "total_assets_fq", "total_equity_fq",
@@ -338,6 +338,9 @@ def main():
             "month6": num(index_row.get("Perf.6M"), 4), "year1": num(index_row.get("Perf.Y"), 4),
             "performanceDate": price_date, "performanceSource": "TradingView",
             "indexSymbol": INDEX_SYMBOL, "indexName": "مؤشر S&P 500", "indexTv": INDEX_TV,
+            # شمعة المؤشر لآخر جلسة مكتملة (احتياط حين يتعذر مصدر شموعه Cboe)
+            "ohlc": None if open_now else {"date": price_date, "open": num(index_row.get("open"), 4), "high": num(index_row.get("high"), 4),
+                                           "low": num(index_row.get("low"), 4), "close": num(index_row.get("close"), 4)},
         },
     }
     with open(os.path.join(ROOT, "data.json"), "w", encoding="utf-8") as handle:
