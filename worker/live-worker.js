@@ -67,6 +67,10 @@ function quoteOf(d) {
 // فنقرأ حقوله بـ UTC مباشرة دون تحويل منطقة زمنية.
 const wall = ms => { const iso = new Date(ms).toISOString(); return { date: iso.slice(0, 10), minutes: +iso.slice(11, 13) * 60 + +iso.slice(14, 16) }; };
 
+// "Nov 20, 2026 4:00 PM ET" → "2026-11-20" (null إن لم يُفهم)
+const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+const quoteDay = time => { const m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(time || ''); return m && MONTHS[m[1]] ? `${m[3]}-${MONTHS[m[1]]}-${m[2].padStart(2, '0')}` : null; };
+
 // صناديق (ETF) لا تُجلب كأسهم: هذه الرموز تُرسل بفئة etf (ويمكن للعميل كتابة SYMBOL:etf صراحة)
 const ETFS = new Set(['SPY', 'SPUS', 'QQQ', 'VOO', 'IVV', 'DIA', 'IWM', 'HLAL', 'UMMA']);
 const STATUS = s => /pre/i.test(s) ? 'Pre-Market' : /after|post/i.test(s) ? 'After-Hours' : /closed/i.test(s) ? 'Closed' : /open/i.test(s) ? 'Open' : s || null;
@@ -121,10 +125,14 @@ async function session(url) {
   // الجلسة العادية فقط: 9:30 – 16:00 بتوقيت نيويورك
   const regular = ticks.filter(([ms]) => { const w = wall(ms); return w.date === date && w.minutes >= 570 && w.minutes <= 960; });
   const px = regular.map(t => t[1]);
-  const high = Math.max(...px, q.high ?? -Infinity), low = Math.min(...px, q.low ?? Infinity);
+  // صفحة info عند ناسداك تتأخر أحيانًا يومًا عن الصفقات (إغلاق الجلسة السابقة وحجمها ونطاقها):
+  // إن اختلف يومها عن يوم الصفقات فلا يُؤخذ منها شيء، ويكون الإغلاق آخر صفقة في الجلسة
+  const sameDay = !q.time || quoteDay(q.time) === date;
+  const high = Math.max(...px, sameDay ? q.high ?? -Infinity : -Infinity), low = Math.min(...px, sameDay ? q.low ?? Infinity : Infinity);
   return json({
     symbol, date, open: px[0] ?? null, high: Number.isFinite(high) ? high : null, low: Number.isFinite(low) ? low : null,
-    close: q.price, volume: q.volume, prevClose, status: q.status, time: q.time, realtime: q.realtime, ticks
+    close: sameDay ? q.price : px.at(-1) ?? null, volume: sameDay ? q.volume : null, prevClose, status: q.status,
+    time: sameDay ? q.time : null, realtime: q.realtime, ticks
   });
 }
 

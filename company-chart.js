@@ -1890,6 +1890,11 @@
     // ---- شمعة لحظية: آخر شمعة تتحرك مع سعر Nasdaq الحي (LiveQuotes / worker). تُعاد حسابات المؤشرات كل 30 ثانية أو عند شمعة جديدة.
     function applyLive(s) {
       if (!chart || !main || !raw.length || !(s?.close > 0) || !s.date) return;
+      // شمعة رسمية (إغلاق Nasdaq المجمّع) لا يغيّرها السعر الحي: بعد الإغلاق قد يعيد ناسداك سعرًا قديمًا أو من منصاته وحدها
+      if (file.officialThrough && s.date <= file.officialThrough) return;
+      // سعر الإغلاق والحجم من يوم آخر غير يوم الصفقات (ناسداك يعيد أحيانًا بيانات الجلسة السابقة): لا يُخلط بشمعة اليوم
+      const quoteDay = window.LiveQuotes?.dateOf?.(s);
+      if (quoteDay && quoteDay !== s.date) return;
       const last = raw.at(-1);
       let added = false;
       if (s.date === last.time) {
