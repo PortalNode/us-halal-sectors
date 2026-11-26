@@ -993,10 +993,13 @@
         localization: { priceFormatter: p => f2.format(p), timeFormatter: t => crosshairDate(t, state.interval) }
       });
       const { up, down } = colors;
+      // خط سعر الإغلاق الأخير وملصقه بلون آخر شمعة: في الشموع تلوّنه المكتبة بلون الشمعة نفسها (بلا priceLineColor)،
+      // وفي الخط بحسب الإغلاق الأخير مقابل الإغلاق السابق (paintLastLine)
       main = state.type === 'candles'
-        ? chart.addSeries(LWC.CandlestickSeries, { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: colors.muted })
-        : chart.addSeries(LWC.AreaSeries, { lineColor: colors.gold, topColor: colors.gold + '55', bottomColor: colors.gold + '00', lineWidth: 2, priceLineColor: colors.muted });
+        ? chart.addSeries(LWC.CandlestickSeries, { upColor: up, downColor: down, borderUpColor: up, borderDownColor: down, wickUpColor: up, wickDownColor: down })
+        : chart.addSeries(LWC.AreaSeries, { lineColor: colors.gold, topColor: colors.gold + '55', bottomColor: colors.gold + '00', lineWidth: 2 });
       main.setData(state.type === 'candles' ? data.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })) : data.map(b => ({ time: b.time, value: b.close })));
+      paintLastLine();
       avgLine = null; orderLines = []; drawAvg();
       indLines = []; selPrims = []; volSeries = null; lastBuildAt = Date.now();
       if (shownInd('vol')) {
@@ -1941,6 +1944,12 @@
       if (final) { finalDay = s.date; finalKey = key; }
       return result;
     }
+    // لون خط الإغلاق الأخير في وضع الخط: أخضر إن أغلقت آخر فترة فوق إغلاق التي قبلها، وأحمر إن أغلقت دونه
+    function paintLastLine() {
+      if (!main || state.type === 'candles') return;
+      const last = data.at(-1), prev = data.at(-2);
+      if (last) main.applyOptions({ priceLineColor: prev && last.close < prev.close ? colors.down : colors.up });
+    }
     function applyLive(s, final = false) {
       if (!chart || !main) return;
       const result = mergeSession(s, final);
@@ -1954,6 +1963,7 @@
         if (!b) return;
         try {
           main.update(state.type === 'candles' ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close } : { time: b.time, value: b.close });
+        paintLastLine();
           if (volSeries) volSeries.update({ time: b.time, value: b.volume, color: (b.close >= b.open ? plotColor('vol', 'up') : plotColor('vol', 'down')) + '66' });
         } catch { /* الشارت يُعاد بناؤه */ }
       }
