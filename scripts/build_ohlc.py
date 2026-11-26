@@ -13,9 +13,11 @@
 ohlc/<الرمز>.json          الجلسات الحديثة (بعد حد التاريخ historyThrough)، يتحدث يوميًا
 ohlc/history/<الرمز>.json  ما قبل ذلك منذ 2010، يُكتب عند غيابه أو تغيّر حد التاريخ (مرة كل سنة) أو عند ظهور تجزئة جديدة
 
-التحديث اليومي سريع: إن كانت الشموع متأخرة عن إغلاق data.json يجلب آخر 45 يومًا فقط لكل سهم ويدمجها، فإن اختلف أي
-إغلاق مشترك بأكثر من 0.3% (تجزئة جديدة) أعاد بناء الشموع الكاملة لذلك السهم. وإن كانت الشموع حديثة لا يفعل شيئًا،
-فيصلح تشغيله في كل دورة تحديث بعد الإغلاق.
+شمعة الجلسة بعد الإغلاق (كالسوق السعودي): من ماسح TradingView بعد 16:20 بتوقيت نيويورك، شمعة الجلسة والجلسة التي قبلها
+(الافتتاح والإغلاق مزادا الافتتاح والإغلاق الرسميان، والنطاق والحجم مجمّعة)، فتدخل الملف بعد الإغلاق بدقائق لا ساعات،
+وتُعاد كل دورة حتى نهاية اليوم ولا يُكتب الملف إلا إن تغيّر. إن اختلفت شمعة الجلسة السابقة عن المخزّنة بمعامل واحد للشمعة
+كلها فهي تجزئة جديدة: يعاد بناء شموع السهم من ناسداك. وناسداك أيضًا يملأ الجلسات التي فاتت التحديث (آخر 45 يومًا)،
+ويبني سهمًا جديدًا أو تاريخًا تغيّر حده. إن تعذر TradingView بقي المسار القديم: ناسداك وحده متى نشر شمعة الجلسة.
 
     python3 scripts/build_ohlc.py              # كل الأسهم
     python3 scripts/build_ohlc.py AAPL MSFT    # أسهم محددة
@@ -39,6 +41,13 @@ INDEX_SYMBOL = "SPX"  # المؤشر المرجعي (يطابق marketSummary.in
 HISTORICAL = "https://api.nasdaq.com/api/quote/{sym}/historical?assetclass={cls}&fromdate={start}&limit=5000&todate={end}"
 CHART = "https://api.nasdaq.com/api/quote/{sym}/chart?assetclass={cls}&fromdate={start}&todate={end}"
 CBOE_SPX = "https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_SPX.json"
+TV_SCAN = "https://scanner.tradingview.com/america/scan"
+# شمعة الجلسة والجلسة السابقة كما يعرضهما TradingView (الافتتاح والإغلاق مزادا الافتتاح والإغلاق الرسميان، والنطاق والحجم مجمّعة من كل المنصات)
+TV_COLUMNS = ["name", "time", "open", "high", "low", "close", "volume",
+              "time[1]", "open[1]", "high[1]", "low[1]", "close[1]", "volume[1]", "currency"]
+# TradingView متأخر 15 دقيقة للطلبات المجهولة: لا تُعتمد شمعة الجلسة قبل 16:20 بتوقيت نيويورك
+SETTLE_MINUTES = 16 * 60 + 20
+SPLIT_TOLERANCE = 0.004  # التجزئة تحرّك الشمعة كلها بمعامل واحد؛ اختلاف الإغلاق وحده تصحيح
 
 
 def get_json(url, timeout=60, tries=3):
@@ -128,8 +137,82 @@ def with_session_bar(rows, bar):
     return rows, False
 
 
-def pack(symbol, rows, source, official_through, dividends=None, history_through=None):
-    out = {"symbol": symbol, "source": source, "officialThrough": official_through, "est": [],
+def tv_bar(t, o, h, l, c, v):
+    """شمعة TradingView صالحة (تاريخ الجلسة بتوقيت نيويورك، أسعار موجبة متسقة، حجم موجب) أو None."""
+    if not isinstance(t, (int, float)) or not all(isinstance(x, (int, float)) and x > 0 for x in (o, h, l, c)):
+        return None
+    if not (isinstance(v, (int, float)) and v > 0) or h < max(o, c) * 0.9999 or l > min(o, c) * 1.0001:
+        return None
+    date = datetime.fromtimestamp(t, timezone.utc).astimezone(NY).strftime("%Y-%m-%d")
+    return (date, round(o, 4), round(max(h, o, c), 4), round(min(l, o, c), 4), round(c, 4), int(round(v)))
+
+
+def tv_row(values):
+    """صف الماسح (أعمدة TV_COLUMNS) → {"today": شمعة, "prev": شمعة} أو None إن لم تكن العملة دولارًا."""
+    _, t, o, h, l, c, v, t1, o1, h1, l1, c1, v1, currency = (list(values) + [None] * 14)[:14]
+    if currency and currency != "USD":
+        return None
+    return {"today": tv_bar(t, o, h, l, c, v), "prev": tv_bar(t1, o1, h1, l1, c1, v1)}
+
+
+def tv_sessions(stocks):
+    """{الرمز: {"today", "prev"}} من ماسح TradingView لكل الأسهم (دفعات من 100). فشل الماسح → {}."""
+    out = {}
+    tickers = {(s.get("tvSymbol") or f"{s.get('exchange') or 'NASDAQ'}:{s['symbol']}"): s["symbol"] for s in stocks}
+    names = list(tickers)
+    for i in range(0, len(names), 100):
+        body = json.dumps({"symbols": {"tickers": names[i:i + 100], "query": {"types": []}}, "columns": TV_COLUMNS}).encode()
+        data = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(TV_SCAN, data=body, headers={"User-Agent": UA, "Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    data = json.load(r)
+                break
+            except Exception:
+                time.sleep(1.5 * (attempt + 1))
+        for row in (data or {}).get("data") or []:
+            symbol = tickers.get(row.get("s"))
+            session = symbol and tv_row(row.get("d") or [])
+            if session and session["today"]:
+                out[symbol] = session
+    return out
+
+
+def weekdays_between(a, b):
+    """أيام العمل (الاثنين–الجمعة) بين تاريخين، دونهما."""
+    day, end, n = datetime.strptime(a, "%Y-%m-%d") + timedelta(days=1), datetime.strptime(b, "%Y-%m-%d"), 0
+    while day < end:
+        n += day.weekday() < 5
+        day += timedelta(days=1)
+    return n
+
+
+def add_session(rows, session, session_date, filled=False):
+    """يضع شمعتي TradingView (الجلسة session_date والجلسة السابقة لها) مكان المخزّنتين، كما في السوق السعودي.
+    يرجع (الشموع، الحالة): "added" أُضيفت، "split" إغلاق الجلسة السابقة تغيّر بمعامل واحد للشمعة كلها
+    (تجزئة: يلزم إعادة بناء التاريخ)، "gap" جلسات ناقصة قبل الجلسة السابقة (تُملأ من ناسداك)، None لا شيء."""
+    today, prev = (session or {}).get("today"), (session or {}).get("prev")
+    if not today or today[0] != session_date or (rows and today[0] < rows[-1][0]):
+        return rows, None
+    stored = {r[0]: r for r in rows}
+    if prev and prev[0] < today[0]:
+        old = stored.get(prev[0])
+        if old and abs(prev[4] / old[4] - 1) > 0.01:
+            ratios = [prev[k] / old[k] for k in (1, 2, 3, 4)]
+            if max(ratios) / min(ratios) - 1 <= SPLIT_TOLERANCE:
+                return rows, "split"
+        before = [r for r in rows if r[0] < prev[0]]
+        # الجلسة السابقة غير مخزّنة وبينها وبين آخر شمعة مخزنة يوم عمل أو أكثر: جلسات فاتت التحديث.
+        # filled: مُلئت من ناسداك قبل الاستدعاء (ما بقي عطلة رسمية أو جلسة لم ينشرها ناسداك بعد)
+        if not filled and not old and before and weekdays_between(before[-1][0], prev[0]) > 0:
+            return rows, "gap"
+        return clean(before + [prev, today]), "added"
+    return clean([r for r in rows if r[0] < today[0]] + [today]), "added"
+
+
+def pack(symbol, rows, source, official_through, dividends=None, history_through=None, est=None):
+    out = {"symbol": symbol, "source": source, "officialThrough": official_through, "est": est or [],
            "div": dividends or [], "flags": []}
     for key, idx in (("d", 0), ("o", 1), ("h", 2), ("l", 3), ("c", 4), ("v", 5)):
         out[key] = [r[idx] for r in rows]
@@ -182,53 +265,54 @@ def merge_recent(old_rows, fresh):
     return [r for r in old_rows if r[0] < first] + fresh
 
 
+def nasdaq_rows(symbol, end, start=START):
+    """شموع ناسداك الحديثة (سهم ثم صندوق متداول). يرجع (الشموع، الفئة)."""
+    for cls in ("stocks", "etf"):
+        rows = nasdaq_recent(symbol, cls, end, start)
+        time.sleep(0.35)
+        if rows:
+            return rows, cls
+    return [], "stocks"
+
+
+def session_settled(now, session_date):
+    """هل انتهت الجلسة وتجاوزنا تأخير TradingView (16:20 بتوقيت نيويورك)؟"""
+    today = now.strftime("%Y-%m-%d")
+    return session_date < today or (session_date == today and now.hour * 60 + now.minute >= SETTLE_MINUTES)
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     full = "--full" in sys.argv
     with open(os.path.join(ROOT, "data.json"), encoding="utf-8") as handle:
         data = json.load(handle)
-    listed = [s["symbol"] for sector in data["sectors"] for s in sector["stocks"]]
+    stocks = [s for sector in data["sectors"] for s in sector["stocks"]]
+    listed = [s["symbol"] for s in stocks]
     symbols = args or listed + [data["marketSummary"]["indexSymbol"]]
-    mode = data["priceSource"]["mode"]
+    mode, session_date = data["priceSource"]["mode"], data["asOf"]
     now = datetime.now(NY)
     boundary = history_boundary(now)
     end = now.strftime("%Y-%m-%d")
-    missing, rewritten, incremental = [], 0, 0
-    if not args and not full:
-        if mode != "close":
-            print("الجلسة جارية: لا تحديث للشموع قبل الإغلاق")
-            return
-        stale = []
-        for symbol in symbols:
-            file = read(os.path.join(ROOT, "ohlc", f"{symbol}.json"))
-            if not file or not file.get("d") or file["d"][-1] < data["asOf"]:
-                stale.append(symbol)
-        if not stale:
-            print(f"الشموع حديثة حتى {data['asOf']}")
-            return
-        symbols = stale
+    if mode != "close" and not args and not full:
+        print("الجلسة جارية: لا تحديث للشموع قبل الإغلاق")
+        return
+    # شمعة الجلسة من TradingView هي المرجع بعد الإغلاق (مثل السوق السعودي)، وناسداك لملء الجلسات الناقصة وبناء التاريخ
+    sessions = {}
+    if mode == "close" and session_settled(now, session_date):
+        wanted = set(symbols)
+        sessions = tv_sessions([s for s in stocks if s["symbol"] in wanted])
+        print(f"شموع TradingView لجلسة {session_date}: {sum(1 for x in sessions.values() if x['today'][0] == session_date)}/{len(wanted & set(listed))}")
+    elif mode == "close":
+        print(f"قبل 16:20 بتوقيت نيويورك: لا تُعتمد شمعة TradingView لجلسة {session_date} بعد (متأخرة 15 دقيقة)")
+    missing, rewritten, written, unchanged, splits = [], 0, 0, 0, []
     for symbol in symbols:
         is_index = symbol == INDEX_SYMBOL
         path = os.path.join(ROOT, "ohlc", f"{symbol}.json")
         hist_path = os.path.join(ROOT, "ohlc", "history", f"{symbol}.json")
         old_recent, old_history = read(path), read(hist_path)
-        # مسار سريع: آخر 45 يومًا فقط تُدمج في الشموع المخزنة
-        if (not full and not is_index and old_recent and old_history and old_recent.get("historyThrough") == boundary
-                and old_recent.get("d")):
-            since = (now - timedelta(days=45)).strftime("%Y-%m-%d")
-            for cls in ("stocks", "etf"):
-                fresh = nasdaq_recent(symbol, cls, end, since)
-                time.sleep(0.3)
-                if fresh:
-                    break
-            merged = merge_recent([r for r in rows_of(old_recent)], fresh)
-            if merged:
-                source = old_recent.get("source", "").split(" · ")[0] + " · " + ("إغلاق الجلسة" if mode == "close" else "شموع متأخرة")
-                through = merged[-1][0] if mode == "close" else (merged[-2][0] if len(merged) > 1 else merged[-1][0])
-                dump(path, pack(symbol, merged, source, through, old_recent.get("div") or [], history_through=boundary))
-                incremental += 1
-                continue
         if is_index:
+            if not args and not full and old_recent and old_recent.get("d") and old_recent["d"][-1] >= session_date:
+                continue
             rows, how = cboe_index(), "Cboe (مؤشر S&P 500)"
             if not rows and old_recent:
                 # Cboe يحجب الطلبات الآلية (403 منذ 19 نوفمبر 2026): نُبقي الشموع المخزنة
@@ -240,17 +324,50 @@ def main():
                 how += " + TradingView"
             if added and previous and (datetime.strptime(rows[-1][0], "%Y-%m-%d") - datetime.strptime(previous, "%Y-%m-%d")).days > 4:
                 print(f"تنبيه: فجوة في شموع المؤشر بين {previous} و{rows[-1][0]} (تحتاج ملئًا يدويًا)")
-            if rows and rows[-1][0] < data["asOf"]:
-                print("تنبيه: لا شمعة للمؤشر لجلسة", data["asOf"])
+            if rows and rows[-1][0] < session_date:
+                print("تنبيه: لا شمعة للمؤشر لجلسة", session_date)
+            cls = "stocks"
         else:
-            rows, how = [], "Nasdaq (معدّل للتجزئة)"
-            for cls in ("stocks", "etf"):
-                rows = nasdaq_recent(symbol, cls, end)
-                time.sleep(0.35)
-                if rows:
-                    break
-            else:
-                cls = "stocks"
+            session = sessions.get(symbol)
+            # ملف حديث يكفي للتحديث السريع: تاريخه محفوظ حتى حد السنة، أو السهم أُدرج بعد الحد فلا تاريخ له
+            quick = (not full and old_recent and old_recent.get("d")
+                     and ((old_recent.get("historyThrough") == boundary and old_history)
+                          or (not old_recent.get("historyThrough") and old_recent["d"][0] > boundary)))
+            rows, how, status = None, "Nasdaq + TradingView", None
+            if quick:
+                # الشموع التقديرية القديمة (نظام سابق) لا تبقى: تحل محلها شمعة TradingView أو ناسداك
+                old_est = set(old_recent.get("est") or [])
+                rows = [r for r in rows_of(old_recent) if r[0] not in old_est]
+                rows, status = add_session(rows, session, session_date)
+                if status == "gap" or (status is None and (not rows or rows[-1][0] < session_date)):
+                    # جلسات فاتت التحديث (أو لا شمعة من TradingView): آخر 45 يومًا من ناسداك تُدمج في المخزّن
+                    fresh, _ = nasdaq_rows(symbol, end, (now - timedelta(days=45)).strftime("%Y-%m-%d"))
+                    merged = merge_recent(rows, fresh) if fresh else rows
+                    if merged is None:
+                        status = "split"
+                    else:
+                        rows, status = add_session(merged, session, session_date, filled=True)
+                        rows = rows if status != "split" else merged
+                if status != "split" and rows:
+                    if rows == rows_of(old_recent) and not old_est and old_recent.get("officialThrough") == rows[-1][0]:
+                        unchanged += 1
+                        continue
+                    source = how + " · إغلاق الجلسة"
+                    through = rows[-1][0] if mode == "close" or len(rows) < 2 else rows[-2][0]
+                    dump(path, pack(symbol, rows, source, through, old_recent.get("div") or [],
+                                    history_through=old_recent.get("historyThrough")))
+                    written += 1
+                    continue
+                if status == "split":
+                    splits.append(symbol)
+            # بناء كامل من ناسداك (سهم جديد، أو تغيّر حد التاريخ، أو تجزئة جديدة)، ثم شمعة TradingView فوقه
+            rows, cls = nasdaq_rows(symbol, end)
+            if rows:
+                with_tv, status = add_session(rows, session, session_date, filled=True)
+                if status == "added":
+                    rows = with_tv
+                elif status == "split":
+                    print(f"تنبيه: {symbol} شموع ناسداك لم تُعدَّل بعد لتجزئة جديدة؛ تُعاد في الدورة التالية")
         if not rows:
             missing.append(symbol)
             continue
@@ -259,15 +376,14 @@ def main():
         last = rows[-1][0]
         through = last if mode == "close" else (rows[-2][0] if len(rows) > 1 else last)
         recent_rows = [r for r in rows if r[0] > boundary]
-        keep_history = (not full and old_history and old_recent and old_recent.get("historyThrough") == boundary
-                        and history_matches(old_history, rows))
+        keep_history = (not full and symbol not in splits and old_history and old_recent
+                        and old_recent.get("historyThrough") == boundary and history_matches(old_history, rows))
         if keep_history:
             history_rows = None
         elif is_index:
             history_rows = [r for r in rows if r[0] <= boundary]
         else:
-            first_recent = rows[0][0]
-            early = nasdaq_early(symbol, cls, first_recent)
+            early = nasdaq_early(symbol, cls, rows[0][0])
             time.sleep(0.35)
             history_rows = [r for r in early + rows if r[0] <= boundary]
         if history_rows is not None:
@@ -279,7 +395,10 @@ def main():
         has_history = keep_history or bool(history_rows)
         dump(path, pack(symbol, recent_rows, source, through, [d for d in dividends if d[0] > boundary],
                         history_through=(boundary if has_history else None)))
-    print(f"تم: {len(symbols) - len(missing)}/{len(symbols)} · الجلسة الأخيرة {data['asOf']} · ملفات تاريخ أُعيدت كتابتها: {rewritten} · تحديث سريع: {incremental}")
+        written += 1
+    print(f"تم: الجلسة {session_date} · ملفات كُتبت {written} · بلا تغيير {unchanged} · ملفات تاريخ أُعيدت كتابتها {rewritten}")
+    if splits:
+        print("تجزئة جديدة أُعيد بناء شموعها:", splits)
     if missing:
         print("بلا شموع:", missing)
 

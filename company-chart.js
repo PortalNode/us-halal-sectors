@@ -149,6 +149,7 @@
   // نمط الخط على الشاشة: المنقط والمتقطع يتناسبان مع السماكة
   const dashFor = (line, width) => { const u = Math.max(1, width || 1); return line === 'dotted' ? [u, 3 * u] : line === 'dashed' ? [6 * u, 4 * u] : []; };
   // المغناطيس كما في TradingView: يلصق نقطة الرسم بأقرب سعر من الشمعة (افتتاح، أعلى، أدنى، إغلاق)؛
+  // وفي الفيبوناتشي بالذيل فقط (أعلى أو أدنى سعر) لأن التصحيح يُقاس من ذيل القمة إلى ذيل القاع؛
   // «ضعيف» حين يقترب المؤشر منه فقط، و«قوي» دائمًا
   const MAGNETS = [['off', 'إيقاف'], ['weak', 'ضعيف'], ['strong', 'قوي']];
   const WEAK_MAGNET_PX = 14;
@@ -1113,7 +1114,8 @@
     document.addEventListener('fullscreenchange', onFullscreenChange);
 
     // نقطة الرسم من موضع المؤشر: شمعة أقرب + السعر عند ذلك الارتفاع، داخل لوحة السعر فقط
-    function pointFrom(event) {
+    // type: نوع الرسم، والفيبوناتشي يلتصق بذيل الشمعة فقط (أعلى أو أدنى سعر)
+    function pointFrom(event, type) {
       if (!chart || !main) return null;
       const rect = box.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
       if (y < 0 || y > chart.panes()[0].getHeight()) return null;
@@ -1123,7 +1125,8 @@
       // بعد آخر شمعة: لا شمعة يلتصق بها المغناطيس، فالنقطة حيث المؤشر
       if (index > lastIndex()) return { time: timeAt(index), price, logical: index, snapped: false };
       const b = data[index];
-      const snapped = nearestPrice(state.type === 'candles' ? [b.open, b.high, b.low, b.close] : [b.close], value => main.priceToCoordinate(value), y, state.magnet);
+      const prices = state.type !== 'candles' ? [b.close] : type === 'fib' ? [b.high, b.low] : [b.open, b.high, b.low, b.close];
+      const snapped = nearestPrice(prices, value => main.priceToCoordinate(value), y, state.magnet);
       return { time: b.time, price: snapped ?? price, logical: index, snapped: snapped != null };
     }
     let press = null;
@@ -1170,7 +1173,7 @@
     }
     box.addEventListener('pointerdown', event => {
       if (!state.tool || event.button !== 0) return;
-      const point = pointFrom(event); if (!point) return;
+      const point = pointFrom(event, state.tool); if (!point) return;
       event.preventDefault();
       press = { x: event.clientX, y: event.clientY, point };
       if (SINGLE_CLICK_TOOLS.includes(state.tool)) return;
@@ -1182,7 +1185,7 @@
     });
     box.addEventListener('pointermove', event => {
       if (!state.tool) return;
-      const point = pointFrom(event);
+      const point = pointFrom(event, state.tool);
       hover = point;
       if (point && pending && preview) preview.b = point;
       if (point && pending2 && preview) preview.off = chanOffsetAt(pending2.a, pending2.b, point);
@@ -1320,7 +1323,7 @@
         if (point) { d.off = point.price - (drag.part === 'offA' ? d.a : d.b).price; hover = point; }
       } else {
         // طرف الرسم يتبع المؤشر، ويلتصق بالمغناطيس إن كان مفعّلًا
-        const point = pointFrom(event);
+        const point = pointFrom(event, d.type);
         if (point) { d[drag.part] = { time: point.time, price: point.price }; if (d.type === 'hray') d.b = { ...d.a }; hover = point; }
       }
       drag.moved = true;
@@ -1339,13 +1342,15 @@
     function applyCrosshair() {
       if (!chart || !LWC) return;
       const snapping = state.magnet === 'strong' && (state.tool || (drag && drag.part !== 'body'));
-      chart.applyOptions({ crosshair: { mode: snapping ? (state.type === 'candles' ? LWC.CrosshairMode.MagnetOHLC : LWC.CrosshairMode.Magnet) : LWC.CrosshairMode.Normal } });
+      // الفيبوناتشي يلتصق بالذيل فقط، وMagnetOHLC يلتصق بالافتتاح والإغلاق أيضًا فيضلّل؛ المقبض يبيّن نقطة الالتصاق
+      const fibSnap = state.tool === 'fib' || (drag?.orig?.type === 'fib');
+      chart.applyOptions({ crosshair: { mode: snapping && !fibSnap ? (state.type === 'candles' ? LWC.CrosshairMode.MagnetOHLC : LWC.CrosshairMode.Magnet) : LWC.CrosshairMode.Normal } });
     }
     box.addEventListener('pointerup', event => {
       if (!state.tool || !press) return;
       const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6;
       if (SINGLE_CLICK_TOOLS.includes(state.tool)) { if (!moved) placeAt(press.point); }
-      else if (pending && moved) { const point = pointFrom(event) ?? preview?.b; if (point) finish(point); }
+      else if (pending && moved) { const point = pointFrom(event, state.tool) ?? preview?.b; if (point) finish(point); }
       press = null;
     });
     // الضغط على خط مؤشر (أو داخل لوحته) يحدده فتظهر أزراره، والضغط في مكان آخر يلغي التحديد
@@ -1725,7 +1730,7 @@
       if (!flyout.hidden && flyout.dataset.kind === kind) { closeFlyout(); return; }
       const row = (attr, id, on, inner) => `<button type="button" role="menuitemcheckbox" data-${attr}="${id}" aria-pressed="${on}">${inner}</button>`;
       flyout.innerHTML = kind.startsWith('grp:') ? groupMenu(kind.slice(4)) : kind === 'trash' ? trashMenu() : kind === 'magnet'
-        ? `<b>المغناطيس</b>${MAGNETS.map(([id, t]) => row('magnet', id, state.magnet === id, `<span>${t}<small>${id === 'weak' ? 'يلصق النقطة بأقرب سعر في الشمعة حين يقترب المؤشر منه' : id === 'strong' ? 'يلصق النقطة دائمًا بأقرب سعر (افتتاح، أعلى، أدنى، إغلاق)' : 'النقطة حيث المؤشر تمامًا'}</small></span>`)).join('')}`
+        ? `<b>المغناطيس</b>${MAGNETS.map(([id, t]) => row('magnet', id, state.magnet === id, `<span>${t}<small>${id === 'weak' ? 'يلصق النقطة بأقرب سعر في الشمعة حين يقترب المؤشر منه' : id === 'strong' ? 'يلصق النقطة دائمًا بأقرب سعر (افتتاح، أعلى، أدنى، إغلاق)' : 'النقطة حيث المؤشر تمامًا'}${id !== 'off' ? '؛ وفي الفيبوناتشي بالذيل (أعلى أو أدنى سعر)' : ''}</small></span>`)).join('')}`
         : `<b>المؤشرات الفنية</b>${INDICATORS.map(x => { const p = Object.values(indCfg[x.id].plots)[0]; return row('ind', x.id, state.ind.has(x.id), `<i style="background:${p.color || p.colors?.[0] || colors?.muted || '#9da7b2'}"></i><span>${esc(indTitle(x.id))}</span>`); }).join('')}`;
       flyout.dataset.kind = kind; flyout.hidden = false; tip.hidden = true;
       sideBar.querySelectorAll('[data-menu]').forEach(x => x.setAttribute('aria-expanded', String(x === button)));
@@ -1887,64 +1892,104 @@
     window.addEventListener('portfolio:change', onPortfolio);
     window.Portfolio?.canTrade(String(symbol)).then(ok => { const b = panel.querySelector('[data-pf-btns]'); if (ok && b) b.hidden = false; });
 
-    // ---- شمعة لحظية: آخر شمعة تتحرك مع سعر Nasdaq الحي (LiveQuotes / worker). تُعاد حسابات المؤشرات كل 30 ثانية أو عند شمعة جديدة.
-    function applyLive(s) {
-      if (!chart || !main || !raw.length || !(s?.close > 0) || !s.date) return;
+    // ---- شمعة لحظية: آخر شمعة تتحرك مع سعر Nasdaq الحي (LiveQuotes / worker) أثناء الجلسة العادية،
+    // وبعد الإغلاق تُستبدل بشمعة الجلسة المكتملة من TradingView. تُعاد حسابات المؤشرات كل 30 ثانية أو عند شمعة جديدة.
+    const wallOf = ms => { const iso = new Date(ms).toISOString(); return { date: iso.slice(0, 10), minutes: +iso.slice(11, 13) * 60 + +iso.slice(14, 16) }; };
+    let finalDay = null, finalKey = ''; // يوم ثُبّتت شمعته من TradingView بعد الإغلاق: لا تحركه صفقات ناسداك بعد ذلك
+    // يدمج شمعة جلسة اليوم s في raw. final: شمعة مكتملة (TradingView) تحل محل شمعة اليوم كاملة.
+    // يعيد 'added' أو 'updated' أو null (لم يتغير شيء)
+    function mergeSession(s, final = false) {
+      if (!raw.length || !(s?.close > 0) || !s.date) return null;
       // شمعة رسمية (إغلاق Nasdaq المجمّع) لا يغيّرها السعر الحي: بعد الإغلاق قد يعيد ناسداك سعرًا قديمًا أو من منصاته وحدها
-      if (file.officialThrough && s.date <= file.officialThrough) return;
-      // سعر الإغلاق والحجم من يوم آخر غير يوم الصفقات (ناسداك يعيد أحيانًا بيانات الجلسة السابقة): لا يُخلط بشمعة اليوم
-      const quoteDay = window.LiveQuotes?.dateOf?.(s);
-      if (quoteDay && quoteDay !== s.date) return;
+      if (file.officialThrough && s.date <= file.officialThrough) return null;
+      let { open, high, low, close } = s;
+      const key = final && [s.date, open, high, low, close, s.volume].join();
+      if (final && key === finalKey) return null; // لم تتغير شمعة TradingView منذ آخر طلب
+      if (!final) {
+        if (s.date === finalDay) return null;
+        // سعر الإغلاق والحجم من يوم آخر غير يوم الصفقات (ناسداك يعيد أحيانًا بيانات الجلسة السابقة): لا يُخلط بشمعة اليوم
+        const quoteDay = window.LiveQuotes?.dateOf?.(s);
+        if (quoteDay && quoteDay !== s.date) return null;
+        // صفقات الجلسة العادية (9:30 – 16:00) هي المرجع: نطاق اليوم عند ناسداك قد يحوي صفقات شاذة
+        // (NVDA في 24 نوفمبر 2026: أعلى 230.26 وأدنى 125 والجلسة كلها بين 150.60 و159.80)
+        const px = (s.ticks || []).filter(([ms]) => { const w = wallOf(ms); return w.date === s.date && w.minutes >= 570 && w.minutes <= 960; }).map(t => t[1]);
+        if (!px.length) return null; // ما قبل السوق: لا شمعة لليوم قبل أول صفقة في الجلسة العادية
+        const hi = Math.max(...px), lo = Math.min(...px);
+        if (!(close <= hi * 1.01 && close >= lo * 0.99)) close = px.at(-1);
+        high = Math.max(hi, close, high > 0 && high <= hi * 1.01 ? high : -Infinity);
+        low = Math.min(lo, close, low > 0 && low >= lo * 0.99 ? low : Infinity);
+        open = open > 0 ? open : px[0];
+        // شمعة TradingView المتأخرة 15 دقيقة لنفس الجلسة: افتتاحها مزاد الافتتاح الرسمي (أول صفقة عند ناسداك تختلف عنه،
+        // TSLA في 25 نوفمبر 2026: 364.55 بدل 370.515)، ونطاقها مجمّع من كل المنصات فلا تفوته قمة أو قاع
+        const tv = s.tv;
+        if (tv?.date === s.date && [tv.open, tv.high, tv.low].every(x => x > 0)) {
+          open = tv.open; high = Math.max(high, tv.high); low = Math.min(low, tv.low);
+          if (!(s.volume > 0) && tv.volume > 0) s = { ...s, volume: tv.volume };
+        }
+      }
+      const volume = s.volume > 0 ? Math.round(s.volume) : null;
       const last = raw.at(-1);
-      let added = false;
+      let result = 'updated';
       if (s.date === last.time) {
-        last.close = s.close;
-        last.high = Math.max(last.high, s.high ?? s.close, s.close);
-        last.low = Math.min(last.low, s.low ?? s.close, s.close);
-        if (s.volume > 0) last.volume = Math.round(s.volume);
+        if (final) Object.assign(last, { open, high, low, close });
+        else { last.close = close; last.high = Math.max(last.high, high); last.low = Math.min(last.low, low); }
+        if (volume) last.volume = volume;
       } else if (s.date > last.time) {
-        raw = [...raw, { time: s.date, open: s.open ?? last.close, high: Math.max(s.high ?? s.close, s.close), low: Math.min(s.low ?? s.close, s.close), close: s.close, volume: Math.round(s.volume || 0) }];
-        added = true;
-      } else return;
-      const busy = pending || pending2 || state.tool;
-      if (added || (!busy && Date.now() - lastBuildAt > 30000)) { build(true); return; }
-      daily = state.adj ? adjustDividends(raw, dividends) : raw;
-      data = group(daily, state.interval);
-      const b = data.at(-1);
-      if (!b) return;
-      try {
-        main.update(state.type === 'candles' ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close } : { time: b.time, value: b.close });
-        if (volSeries) volSeries.update({ time: b.time, value: b.volume, color: (b.close >= b.open ? plotColor('vol', 'up') : plotColor('vol', 'down')) + '66' });
-      } catch { /* الشارت يُعاد بناؤه */ }
-      const badge = panel.querySelector('.cc-live');
-      if (badge) { badge.hidden = false; badge.title = `آخر سعر ${f2.format(s.close)} · ${s.time || ''}`; }
+        raw = [...raw, { time: s.date, open: open ?? last.close, high, low, close, volume: volume || 0 }];
+        result = 'added';
+      } else return null;
+      if (final) { finalDay = s.date; finalKey = key; }
+      return result;
     }
+    function applyLive(s, final = false) {
+      if (!chart || !main) return;
+      const result = mergeSession(s, final);
+      if (!result) return;
+      const busy = pending || pending2 || state.tool;
+      if (result === 'added' || final || (!busy && Date.now() - lastBuildAt > 30000)) { build(true); }
+      else {
+        daily = state.adj ? adjustDividends(raw, dividends) : raw;
+        data = group(daily, state.interval);
+        const b = data.at(-1);
+        if (!b) return;
+        try {
+          main.update(state.type === 'candles' ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close } : { time: b.time, value: b.close });
+          if (volSeries) volSeries.update({ time: b.time, value: b.volume, color: (b.close >= b.open ? plotColor('vol', 'up') : plotColor('vol', 'down')) + '66' });
+        } catch { /* الشارت يُعاد بناؤه */ }
+      }
+      const badge = panel.querySelector('.cc-live');
+      if (badge) {
+        badge.hidden = final;
+        badge.title = `آخر سعر ${f2.format(raw.at(-1).close)} · ${s.time || ''}`;
+      }
+    }
+    // خارج الجلسة العادية: شمعة TradingView المكتملة (لا أسعار ما قبل السوق وما بعده). أثناءها: الـ Worker
+    // أثناء الجلسة: صفقات الـ Worker للإغلاق الحي، ومعها شمعة TradingView المتأخرة للافتتاح والنطاق (تُحفظ 60 ثانية في live.js)
+    const liveSource = lq => lq.isRegularHours()
+      ? (lq.enabled ? Promise.all([lq.session(symbol), lq.sessionBar?.(symbol).catch(() => null) ?? null]).then(([s, tv]) => [s && { ...s, tv }, false]) : null)
+      : lq.sessionBar?.(symbol).then(s => [s, true]) ?? null;
     function startLive() {
       const lq = window.LiveQuotes;
-      if (!lq?.enabled) return;
+      if (!lq) return;
       clock?.insertAdjacentHTML('beforebegin', '<span class="cc-live" hidden style="color:var(--green,#2bb673);font-size:11px;font-weight:700;margin-inline-end:8px">● لحظي</span>');
       const tick = async () => {
         if (liveBusy || document.hidden || !panel.isConnected) return;
         liveBusy = true;
-        try { applyLive(await lq.session(symbol)); } finally { liveBusy = false; }
+        try { const r = await liveSource(lq); if (r) applyLive(r[0], r[1]); } finally { liveBusy = false; }
       };
-      const loop = () => { liveTimer = setTimeout(async () => { await tick(); if (panel.isConnected) loop(); }, lq.isExtendedHours() ? 1500 : 30000); };
+      const loop = () => { liveTimer = setTimeout(async () => { await tick(); if (panel.isConnected) loop(); }, lq.isRegularHours() ? 1500 : 60000); };
       tick(); loop();
     }
     const theme = new MutationObserver(() => { if (!chart) return; colors = palette(panel); build(true); });
     current = { destroy({ keepFull = false } = {}) { if (isFull() && !keepFull) setFull(false); document.removeEventListener('fullscreenchange', onFullscreenChange); theme.disconnect(); resizeWatch.disconnect(); clearTimeout(liveTimer); window.removeEventListener('portfolio:change', onPortfolio); chart?.remove(); chart = null; } };
-    const firstLive = window.LiveQuotes?.enabled && window.LiveQuotes.isExtendedHours() ? window.LiveQuotes.session(symbol) : null; // يبدأ مع تحميل المكتبة
+    const firstLive = window.LiveQuotes ? liveSource(window.LiveQuotes) : null; // يبدأ مع تحميل المكتبة
     loadLib().then(async lib => {
       LWC = lib; colors = palette(panel);
-      // أثناء ساعات السوق: شمعة اليوم تدخل أول رسم (ننتظر أول رد حتى 6 ثوانٍ) فلا تظهر آخر شمعة أمس ثم تتغير
+      // شمعة اليوم تدخل أول رسم (ننتظر أول رد حتى 6 ثوانٍ) فلا تظهر آخر شمعة أمس ثم تتغير
       if (firstLive) {
-        const s = await Promise.race([firstLive, new Promise(resolve => setTimeout(() => resolve(null), 6000))]);
-        const last = raw.at(-1);
+        const r = await Promise.race([firstLive.catch(() => null), new Promise(resolve => setTimeout(() => resolve(null), 6000))]);
         if (!panel.isConnected) return;
-        if (s?.close > 0 && s.date && last) {
-          if (s.date === last.time) { last.close = s.close; last.high = Math.max(last.high, s.high ?? s.close, s.close); last.low = Math.min(last.low, s.low ?? s.close, s.close); if (s.volume > 0) last.volume = Math.round(s.volume); }
-          else if (s.date > last.time) raw = [...raw, { time: s.date, open: s.open ?? last.close, high: Math.max(s.high ?? s.close, s.close), low: Math.min(s.low ?? s.close, s.close), close: s.close, volume: Math.round(s.volume || 0) }];
-        }
+        if (r) mergeSession(r[0], r[1]);
       }
       setTool(null);
       build(false);

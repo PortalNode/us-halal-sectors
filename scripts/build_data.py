@@ -253,6 +253,10 @@ def main():
             "priceTimestamp": None,
             "priceSource": "TradingView",
             "priceStatus": "delayed" if open_now else "close",
+            # شمعة الجلسة المكتملة من TradingView: احتياط لملف الشموع حتى تنشر ناسداك شمعتها الرسمية (build_ohlc.py)
+            "ohlc": None if open_now or not row.get("time") else {
+                "date": et_date(row["time"]), "open": num(row.get("open"), 4), "high": num(row.get("high"), 4),
+                "low": num(row.get("low"), 4), "close": price, "volume": int(row["volume"]) if row.get("volume") else 0},
             "marketCapSource": "TradingView",
             "suspended": False,
             "priceCheckedAt": checked_at,

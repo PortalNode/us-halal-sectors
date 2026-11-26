@@ -99,6 +99,24 @@
   }
   const session = symbol => get(`/session?symbol=${encodeURIComponent(symbol)}`);
 
+  // شمعة الجلسة العادية المكتملة من TradingView (افتتاح/أعلى/أدنى/إغلاق/حجم مجمّعة من كل المنصات، والإغلاق مزاد الإغلاق الرسمي).
+  // تُستخدم بعد الإغلاق بدل صفقات ناسداك التي قد تحوي صفقات شاذة أو أسعار ما بعد السوق. أثناء الجلسة متأخرة 15 دقيقة فلا تُستخدم.
+  // يعيد { date, open, high, low, close, volume, source } أو null
+  const barMemo = new Map();
+  async function sessionBar(symbol) {
+    const name = String(symbol).split(':')[0].toUpperCase(), hit = barMemo.get(name);
+    if (hit && Date.now() - hit.t < TV_TTL) return hit.v;
+    const body = await tvPost({ filter: [{ left: 'name', operation: 'equal', right: name }, { left: 'is_primary', operation: 'equal', right: true }],
+      columns: ['name', 'open', 'high', 'low', 'close', 'volume', 'time', 'currency'], range: [0, 5] });
+    const row = (body?.data || []).find(r => String(r.d?.[0] || '').toUpperCase() === name)?.d;
+    const [, open, high, low, close, volume, time, currency] = row || [];
+    const ok = [open, high, low, close].every(x => x > 0) && high >= Math.max(open, close, low) && low <= Math.min(open, close)
+      && Number.isFinite(time) && (!currency || currency === 'USD');
+    const v = ok ? { date: ymd.format(new Date(time * 1000)), open, high, low, close, volume: Number.isFinite(volume) ? volume : null, source: 'TradingView' } : null;
+    if (v) barMemo.set(name, { t: Date.now(), v });
+    return v;
+  }
+
   const NY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   // ما قبل السوق وبعده تُسعَّر لحظيًا أيضًا: 4:00 – 20:00 بتوقيت نيويورك، الاثنين–الجمعة
   function isExtendedHours(now = new Date()) {
@@ -134,7 +152,7 @@
 
   window.LiveQuotes = {
     saveCache, loadCache,
-    enabled: !!url, url, quotes, session, isExtendedHours, isRegularHours, dateOf,
+    enabled: !!url, url, quotes, session, sessionBar, isExtendedHours, isRegularHours, dateOf,
     get status() { return { ...state }; },
     onStatus(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   };

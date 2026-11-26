@@ -1,3 +1,3 @@
-name = "us-halal-live"
+name = "solitary-heart-0646us-halal-live"  # اسم الـ Worker المنشور فعلًا (رابطه في live-config.js)
 main = "live-worker.js"
 compatibility_date = "2026-01-01"

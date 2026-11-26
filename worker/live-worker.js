@@ -58,7 +58,7 @@ function quoteOf(d) {
   return {
     price: money(p.lastSalePrice), change: money(p.netChange), pct: money(p.percentageChange),
     volume: money(p.volume), time: p.lastTradeTimestamp || null, realtime: p.isRealTime === true,
-    status: d.marketStatus || null, bid: money(p.bidPrice), ask: money(p.askPrice),
+    status: STATUS(d.marketStatus), bid: money(p.bidPrice), ask: money(p.askPrice),
     low: range[0] ?? null, high: range[1] ?? null
   };
 }
@@ -107,6 +107,39 @@ async function quotes(url) {
   return json({ asOf: Date.now(), quotes: out });
 }
 
+// نطاق اليوم عند ناسداك (keyStats.dayrange) يأتي من الشريط المجمّع وقد يحوي صفقات شاذة أو خاطئة
+// (مثال NVDA في 24 نوفمبر 2026: "125.00 - 230.26" بينما صفقات الجلسة 150.60–159.80)، فلا يُقبل طرفه
+// إلا إن كان قريبًا من نطاق الصفقات نفسها. الصفقات عيّنات دقيقة واحدة فقد تفوت قمة أو قاعًا حقيقيًا بفارق صغير فقط.
+export const RANGE_TOLERANCE = 0.01;
+
+// شمعة الجلسة العادية (9:30 – 16:00 بتوقيت نيويورك) من صفقات ناسداك وصفحة info.
+// ticks: [[wallMs, price], ...] · q: ناتج quoteOf · يعيد { date, open, high, low, close, volume, time, final }
+export function sessionBar(ticks, q, now = Date.now()) {
+  const date = wall(ticks.at(-1)?.[0] ?? now).date;
+  const regular = ticks.filter(([ms]) => { const w = wall(ms); return w.date === date && w.minutes >= 570 && w.minutes <= 960; });
+  const px = regular.map(t => t[1]);
+  // صفحة info عند ناسداك تتأخر أحيانًا يومًا عن الصفقات (إغلاق الجلسة السابقة وحجمها ونطاقها):
+  // إن اختلف يومها عن يوم الصفقات فلا يُؤخذ منها شيء، ويكون الإغلاق آخر صفقة في الجلسة
+  const sameDay = !q.time || quoteDay(q.time) === date;
+  // خارج الجلسة العادية (ما بعد السوق وبعد الإغلاق): سعر info وحجمه ونطاقه تشمل الصفقات الممتدة،
+  // والشمعة اليومية للجلسة العادية فقط (كوضع TradingView الافتراضي): الإغلاق آخر صفقة حتى 16:00
+  const open = q.status === 'Open';
+  const live = sameDay && open;
+  const tickHigh = px.length ? Math.max(...px) : null, tickLow = px.length ? Math.min(...px) : null;
+  const okHigh = live && q.high > 0 && (tickHigh == null || (q.high >= tickHigh && q.high <= tickHigh * (1 + RANGE_TOLERANCE)));
+  const okLow = live && q.low > 0 && (tickLow == null || (q.low <= tickLow && q.low >= tickLow * (1 - RANGE_TOLERANCE)));
+  let close = live ? q.price : px.at(-1) ?? null;
+  // سعر info الحي نفسه شاذ (خارج نطاق الجلسة المقبول): نكتفي بآخر صفقة
+  if (live && tickHigh != null && !(close <= tickHigh * (1 + RANGE_TOLERANCE) && close >= tickLow * (1 - RANGE_TOLERANCE))) close = px.at(-1);
+  const high = Math.max(...px, okHigh ? q.high : -Infinity, close ?? -Infinity);
+  const low = Math.min(...px, okLow ? q.low : Infinity, close ?? Infinity);
+  return {
+    date, open: px[0] ?? null, high: Number.isFinite(high) ? high : null, low: Number.isFinite(low) ? low : null,
+    close, volume: live ? q.volume : null, time: live ? q.time : null,
+    final: !open && regular.some(([ms]) => wall(ms).minutes >= 959) // انتهت الجلسة العادية لهذا اليوم
+  };
+}
+
 async function session(url) {
   const symbol = (url.searchParams.get('symbol') || '').toUpperCase();
   if (!SYMBOL.test(symbol)) return json({ error: 'valid symbol required' }, 400);
@@ -121,19 +154,8 @@ async function session(url) {
     ticks = (c.chart || []).map(t => [t.x, t.y]).filter(t => Number.isFinite(t[0]) && Number.isFinite(t[1]));
     prevClose = money(c.previousClose);
   } catch { /* نكتفي بسعر info */ }
-  const date = wall(ticks.at(-1)?.[0] ?? Date.now()).date;
-  // الجلسة العادية فقط: 9:30 – 16:00 بتوقيت نيويورك
-  const regular = ticks.filter(([ms]) => { const w = wall(ms); return w.date === date && w.minutes >= 570 && w.minutes <= 960; });
-  const px = regular.map(t => t[1]);
-  // صفحة info عند ناسداك تتأخر أحيانًا يومًا عن الصفقات (إغلاق الجلسة السابقة وحجمها ونطاقها):
-  // إن اختلف يومها عن يوم الصفقات فلا يُؤخذ منها شيء، ويكون الإغلاق آخر صفقة في الجلسة
-  const sameDay = !q.time || quoteDay(q.time) === date;
-  const high = Math.max(...px, sameDay ? q.high ?? -Infinity : -Infinity), low = Math.min(...px, sameDay ? q.low ?? Infinity : Infinity);
-  return json({
-    symbol, date, open: px[0] ?? null, high: Number.isFinite(high) ? high : null, low: Number.isFinite(low) ? low : null,
-    close: sameDay ? q.price : px.at(-1) ?? null, volume: sameDay ? q.volume : null, prevClose, status: q.status,
-    time: sameDay ? q.time : null, realtime: q.realtime, ticks
-  });
+  const bar = sessionBar(ticks, q);
+  return json({ symbol, ...bar, prevClose, status: q.status, realtime: q.realtime, ticks });
 }
 
 export default {
